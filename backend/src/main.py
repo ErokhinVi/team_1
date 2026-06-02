@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import os
-import secrets
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -71,108 +70,6 @@ async def health() -> dict:
     return {"status": "ok", "team": TEAM_NAME, "block": "backend",
             "commit": COMMIT, "clients_loaded": len(_clients),
             "transactions_loaded": len(_transactions)}
-
-
-@app.get("/coin-flip")
-async def coin_flip() -> dict:
-    """Честное подбрасывание монетки: орёл или решка."""
-    result = "орёл" if secrets.randbits(1) == 0 else "решка"
-    return {
-        "result": result,
-        "result_en": "heads" if result == "орёл" else "tails",
-        "ts": datetime.now().replace(microsecond=0).isoformat(),
-    }
-
-
-_ROULETTE_RED = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
-
-
-@app.get("/casino/roulette")
-async def casino_roulette() -> dict:
-    """Европейская рулетка: число 0..36, цвет и чёт/нечёт."""
-    n = secrets.randbelow(37)
-    if n == 0:
-        color, parity = "зелёный", "ноль"
-    else:
-        color = "красный" if n in _ROULETTE_RED else "чёрный"
-        parity = "чёт" if n % 2 == 0 else "нечёт"
-    return {
-        "number": n,
-        "color": color,
-        "parity": parity,
-        "ts": datetime.now().replace(microsecond=0).isoformat(),
-    }
-
-
-@app.get("/casino/dice")
-async def casino_dice(count: int = Query(default=2, ge=1, le=10)) -> dict:
-    """Бросок N кубиков (по умолчанию 2). Возвращает значения и сумму."""
-    rolls = [secrets.randbelow(6) + 1 for _ in range(count)]
-    return {
-        "count": count,
-        "rolls": rolls,
-        "sum": sum(rolls),
-        "ts": datetime.now().replace(microsecond=0).isoformat(),
-    }
-
-
-_SLOT_SYMBOLS = ["вишня", "лимон", "апельсин", "колокольчик", "звезда", "семёрка"]
-
-
-@app.get("/casino/slot-machine")
-async def casino_slot_machine() -> dict:
-    """Однорукий бандит: три катушки случайных символов."""
-    reels = [_SLOT_SYMBOLS[secrets.randbelow(len(_SLOT_SYMBOLS))] for _ in range(3)]
-    jackpot = reels[0] == reels[1] == reels[2]
-    two_match = (not jackpot) and (
-        reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]
-    )
-    if jackpot:
-        outcome = "джекпот"
-    elif two_match:
-        outcome = "две совпали"
-    else:
-        outcome = "мимо"
-    return {
-        "reels": reels,
-        "jackpot": jackpot,
-        "outcome": outcome,
-        "ts": datetime.now().replace(microsecond=0).isoformat(),
-    }
-
-
-_CARD_RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
-_CARD_SUITS = ["♠", "♥", "♦", "♣"]
-
-
-def _card_value(rank: str) -> int:
-    if rank in ("J", "Q", "K"):
-        return 10
-    if rank == "A":
-        return 11
-    return int(rank)
-
-
-@app.get("/casino/blackjack/draw")
-async def casino_blackjack_draw(count: int = Query(default=2, ge=1, le=10)) -> dict:
-    """Свежая колода — тянем N карт. По умолчанию 2: стартовая раздача блэкджека."""
-    deck = [{"rank": r, "suit": s} for r in _CARD_RANKS for s in _CARD_SUITS]
-    for i in range(len(deck) - 1, 0, -1):
-        j = secrets.randbelow(i + 1)
-        deck[i], deck[j] = deck[j], deck[i]
-    hand = deck[:count]
-    total = sum(_card_value(c["rank"]) for c in hand)
-    aces = sum(1 for c in hand if c["rank"] == "A")
-    while total > 21 and aces > 0:
-        total -= 10
-        aces -= 1
-    return {
-        "hand": hand,
-        "total": total,
-        "blackjack": count == 2 and total == 21,
-        "bust": total > 21,
-        "ts": datetime.now().replace(microsecond=0).isoformat(),
-    }
 
 
 @app.get("/clients")
