@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -70,6 +71,17 @@ async def health() -> dict:
     return {"status": "ok", "team": TEAM_NAME, "block": "backend",
             "commit": COMMIT, "clients_loaded": len(_clients),
             "transactions_loaded": len(_transactions)}
+
+
+@app.get("/coin-flip")
+async def coin_flip() -> dict:
+    """Честное подбрасывание монетки: орёл или решка."""
+    result = "орёл" if secrets.randbits(1) == 0 else "решка"
+    return {
+        "result": result,
+        "result_en": "heads" if result == "орёл" else "tails",
+        "ts": datetime.now().replace(microsecond=0).isoformat(),
+    }
 
 
 @app.get("/clients")
