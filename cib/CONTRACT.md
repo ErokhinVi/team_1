@@ -43,6 +43,13 @@ Tiers by segment — standard (mass, sme): SBER, GAZP, LKOH, MGNT; mass_affluent
 Response includes allowed_tickers list.
 Returns 404 if customer not found.
 
+### POST /deposit/terms
+Personalised deposit offer. Accepts JSON `{"customer_id": "<id>", "amount_rub": int, "term_months": int}`.
+Returns `{"approved": bool, "reason": "...", "rate_pct": float|null, "term_months": int, "amount_rub": int}`.
+Rules: minimum 10,000 RUB; term 3–36 months; no overdue history.
+Rate by segment — mass/sme: 20%; mass_affluent: 21%; premium/private: 22%.
+Returns 404 if customer not found.
+
 ### POST /loan/decision
 Consumer loan decision. Accepts JSON `{"customer_id": "<id>", "amount_rub": int, "term_months": int}`.
 Returns `{"approved": bool, "reason": "...", "amount_rub": int, "term_months": int, "rate_pct": float|null, "monthly_payment_rub": int|null}`.

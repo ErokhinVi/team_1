@@ -54,6 +54,12 @@ class LoanDecisionRequest(BaseModel):
     amount_rub: int
     term_months: int
 
+
+class DepositTermsRequest(BaseModel):
+    customer_id: str
+    amount_rub: int
+    term_months: int
+
 app = FastAPI(title="cib — корпоратив и бизнес-логика", version="1.0.0")
 
 
@@ -319,6 +325,38 @@ async def loan_decision(req: LoanDecisionRequest) -> dict:
     return {"approved": True, "reason": "Approved: income and credit history checks passed",
             "amount_rub": req.amount_rub, "term_months": req.term_months,
             "rate_pct": rate_pct, "monthly_payment_rub": monthly_payment_rub}
+
+
+@app.post("/deposit/terms")
+async def deposit_terms(req: DepositTermsRequest) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(f"{BACKEND_URL}/clients/{req.customer_id}")
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Backend unavailable")
+
+    customer = resp.json()
+    segment = customer.get("segment", "mass")
+    has_overdue = customer.get("has_overdue_history", False)
+
+    def decline(reason: str) -> dict:
+        return {"approved": False, "reason": reason, "rate_pct": None,
+                "term_months": req.term_months, "amount_rub": req.amount_rub}
+
+    if req.amount_rub < 10_000:
+        return decline("Minimum deposit amount is 10,000 RUB")
+    if req.term_months < 3:
+        return decline("Minimum deposit term is 3 months")
+    if req.term_months > 36:
+        return decline("Maximum deposit term is 36 months")
+    if has_overdue:
+        return decline("Deposit unavailable: overdue payment history on record")
+
+    rate_pct = 22.0 if segment in ("premium", "private") else 21.0 if segment == "mass_affluent" else 20.0
+
+    return {"approved": True, "reason": f"Personalised rate for {segment} segment",
+            "rate_pct": rate_pct, "term_months": req.term_months, "amount_rub": req.amount_rub}
 
 
 @app.get("/", response_class=HTMLResponse)
