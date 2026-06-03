@@ -50,6 +50,10 @@ class PayrollValidateRequest(BaseModel):
     employer_id: str
 
 
+class ReferralValidateRequest(BaseModel):
+    referrer_id: str
+
+
 class LoanDecisionRequest(BaseModel):
     customer_id: str
     amount_rub: int
@@ -336,6 +340,34 @@ async def payroll_validate(req: PayrollValidateRequest) -> dict:
             "total_payroll_rub": total_payroll_rub, "employees_count": employees_count}
 
 
+REFERRAL_CAP = 10
+
+
+@app.post("/referral/validate")
+async def referral_validate(req: ReferralValidateRequest) -> dict:
+    # Confirm the referrer is a real customer and hasn't exceeded the invite cap.
+    async with httpx.AsyncClient(timeout=10) as client:
+        client_resp, referrals_resp = await asyncio.gather(
+            client.get(f"{BACKEND_URL}/clients/{req.referrer_id}"),
+            client.get(f"{BACKEND_URL}/referrals/{req.referrer_id}"),
+        )
+
+    if client_resp.status_code == 404:
+        return {"eligible": False, "reason": "Referrer is not a customer of the bank"}
+    if client_resp.status_code != 200 or referrals_resp.status_code not in (200, 404):
+        raise HTTPException(status_code=502, detail="Backend unavailable")
+
+    # 404 on referrals simply means no referrals yet → count 0
+    referrals_so_far = referrals_resp.json().get("total", 0) if referrals_resp.status_code == 200 else 0
+
+    if referrals_so_far >= REFERRAL_CAP:
+        return {"eligible": False,
+                "reason": f"Referral limit reached ({REFERRAL_CAP} invitations); no further bonuses available"}
+
+    return {"eligible": True,
+            "reason": f"Eligible: {referrals_so_far} of {REFERRAL_CAP} invitations used"}
+
+
 @app.post("/loan/decision")
 async def loan_decision(req: LoanDecisionRequest) -> dict:
     async with httpx.AsyncClient(timeout=10) as client:
@@ -570,6 +602,7 @@ th{{background:#16181f;color:#888;font-weight:500}}
 <li><span class="method get">GET</span>/bonds/recommendation/{{customer_id}} — risk-based bond mix</li>
 <li><span class="method post">POST</span>/corporate/payment-auth — corporate payment authorisation</li>
 <li><span class="method post">POST</span>/payroll/validate — payroll eligibility check</li>
+<li><span class="method post">POST</span>/referral/validate — referral anti-abuse check</li>
 </ul>
 </div>
 </body></html>"""

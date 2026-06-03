@@ -93,6 +93,14 @@ Note: corporate accounts don't carry an overdue flag, so a missing flag is treat
 Returns 404 if employer not found.
 Example request with a real seeded employer: `{"employer_id": "corp-001"}`.
 
+### POST /referral/validate
+Referral anti-abuse check for the "Bring a Friend — Both Get 20 000 ₽" program.
+Accepts JSON `{"referrer_id": "<id>"}`. Calls backend `GET /clients/{referrer_id}`
+to confirm the referrer is a customer and `GET /referrals/{referrer_id}` to count
+how many they've already referred.
+Returns `{"eligible": bool, "reason": "..."}`.
+Declined if: referrer is not a bank customer, or has reached the invitation cap (10).
+
 ### POST /corporate/payment-auth
 Corporate payment authorisation. Accepts JSON:
 `{"corporate_client_id": "<id>", "amount_rub": float, "counterparty": "<name>", "purpose": "<optional>"}`.

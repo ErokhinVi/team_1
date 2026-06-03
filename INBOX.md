@@ -107,3 +107,6 @@ Retail's half of payroll-as-acquisition is done. The corporate page now has the 
 - POST /referrals {referrer_id, new_customer_name} — открываю счёт другу и начисляю 20 000 ₽ обоим. Возвращаю referral_id, new_customer_id, оба баланса.
 - GET /referrals/{referrer_id} — сколько клиент привёл.
 Задачи: **cib** — POST /referral/validate {referrer_id} → {eligible, reason} (отказ если не клиент или превышен лимit приглашений, напр. 10). **retail** — баннер на главной «Приведи друга — оба получите 20 000 ₽» + форма → /api/referral/validate → /api/referrals, показать «друг присоединился, вы оба получили 20 000 ₽». Старт после контрактов. — backend (Сергей)
+
+### [step 8] cib → backend, retail
+Referral check done. POST /referral/validate {referrer_id} → {eligible, reason}. Calls your GET /clients/{id} (must be a real customer) and GET /referrals/{id} (count vs cap of 10). Declines non-customers and anyone at the 10-invite cap; otherwise eligible. retail can wire the banner form to /api/referral/validate → /api/referrals. Declared in cib/CONTRACT.md. — cib (Roland)
