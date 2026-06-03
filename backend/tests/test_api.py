@@ -27,6 +27,7 @@ def simulate_restart():
     main._corporate_payments.clear()
     main._loans.clear()
     main._deposits.clear()
+    main._mortgages.clear()
     main._load_seed()
 
 
@@ -500,6 +501,67 @@ def test_deposit_rates_by_term():
 
 
 # ---------------------------------------------------------------------------
+# Mortgages
+# ---------------------------------------------------------------------------
+
+def test_create_mortgage():
+    cid = first_client_id()
+    r = client.post("/mortgages", json={
+        "customer_id": cid, "property_price_rub": 10_000_000,
+        "down_payment_rub": 2_000_000, "loan_amount_rub": 8_000_000,
+        "term_years": 20, "rate_pct": 12.5,
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["mortgage_id"].startswith("mort-")
+    assert data["status"] == "active"
+    assert data["rate_pct"] == 12.5
+    assert data["term_years"] == 20
+    assert data["loan_amount_rub"] == 8_000_000
+    assert data["monthly_payment_rub"] > 0
+    assert "created_at" in data
+
+def test_create_mortgage_rate_honoured_no_cap():
+    cid = first_client_id()
+    r = client.post("/mortgages", json={
+        "customer_id": cid, "property_price_rub": 10_000_000,
+        "down_payment_rub": 2_000_000, "loan_amount_rub": 8_000_000,
+        "term_years": 20, "rate_pct": 21.0,
+    })
+    assert r.status_code == 200
+    # registered rate must equal the quoted rate (no repeat of the deposit bug)
+    assert r.json()["rate_pct"] == 21.0
+
+def test_create_mortgage_does_not_change_balance():
+    cid = first_client_id()
+    before = client.get(f"/clients/{cid}").json()["balance_rub"]
+    client.post("/mortgages", json={
+        "customer_id": cid, "property_price_rub": 5_000_000,
+        "down_payment_rub": 1_000_000, "loan_amount_rub": 4_000_000,
+        "term_years": 15, "rate_pct": 13.0,
+    })
+    after = client.get(f"/clients/{cid}").json()["balance_rub"]
+    assert after == before  # mortgage money goes to seller, not customer account
+
+def test_create_mortgage_not_found():
+    r = client.post("/mortgages", json={
+        "customer_id": "bad-id", "property_price_rub": 5_000_000,
+        "down_payment_rub": 1_000_000, "loan_amount_rub": 4_000_000,
+        "term_years": 15, "rate_pct": 13.0,
+    })
+    assert r.status_code == 404
+
+def test_create_mortgage_invalid_loan_amount():
+    cid = first_client_id()
+    r = client.post("/mortgages", json={
+        "customer_id": cid, "property_price_rub": 1_000_000,
+        "down_payment_rub": 1_000_000, "loan_amount_rub": 0,
+        "term_years": 15, "rate_pct": 13.0,
+    })
+    assert r.status_code == 400
+
+
+# ---------------------------------------------------------------------------
 # Persistence — records and balances survive a data-layer reload (restart)
 # ---------------------------------------------------------------------------
 
@@ -520,11 +582,17 @@ def test_records_survive_restart():
         "customer_id": cid, "ticker": "SBER", "quantity": 2, "direction": "buy"
     }).json()
     order_id = order["order_id"]
+    mortgage_id = client.post("/mortgages", json={
+        "customer_id": cid, "property_price_rub": 10_000_000,
+        "down_payment_rub": 2_000_000, "loan_amount_rub": 8_000_000,
+        "term_years": 20, "rate_pct": 12.5,
+    }).json()["mortgage_id"]
 
     # Simulate the Render process restarting and reloading state from disk.
     simulate_restart()
 
     assert any(c["card_id"] == card_id for c in main._credit_cards), "credit card lost on restart"
+    assert any(m["mortgage_id"] == mortgage_id for m in main._mortgages), "mortgage lost on restart"
     assert any(l["loan_id"] == loan_id for l in main._loans), "loan lost on restart"
     assert any(d["deposit_id"] == deposit_id for d in main._deposits), "deposit lost on restart"
     assert any(o["order_id"] == order_id for o in main._brokerage_orders), "brokerage order lost on restart"

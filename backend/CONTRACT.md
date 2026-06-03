@@ -92,6 +92,14 @@ Seeded corporate ids имеют формат `corp-001`, `corp-002`, `corp-003`.
 Возвращает `{loan_id, customer_id, amount_rub, term_months, rate_pct, monthly_payment_rub, new_balance_rub}`.
 Ошибка `404` если клиент не найден.
 
+### POST /mortgages
+Зарегистрировать ипотеку. Принимает JSON `{customer_id, property_price_rub, down_payment_rub, loan_amount_rub, term_years, rate_pct}`.
+`rate_pct` сохраняется как есть (та же ставка, что показал клиенту cib — без подмены и без потолка).
+Баланс клиента НЕ меняется (деньги идут продавцу недвижимости, а не на счёт клиента).
+Платёж считается аннуитетом за `term_years × 12` месяцев. Запись сохраняется на диск (переживает перезапуск).
+Возвращает `{mortgage_id, customer_id, property_price_rub, down_payment_rub, loan_amount_rub, term_years, rate_pct, monthly_payment_rub, status, created_at}`.
+Ошибка `404` если клиент не найден, `400` если сумма/срок/ставка ≤ 0.
+
 ### GET /corporate/{client_id}/employees
 Список сотрудников корпоративного клиента, у которых есть счёт в банке.
 Возвращает `{total, items: [{id, name, income_rub, balance_rub}]}`.

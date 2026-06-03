@@ -50,6 +50,7 @@ _corporate_accounts_by_id: dict[str, dict[str, Any]] = {}
 _corporate_payments: list[dict[str, Any]] = []
 _loans: list[dict[str, Any]] = []
 _deposits: list[dict[str, Any]] = []
+_mortgages: list[dict[str, Any]] = []
 
 MOCK_PRICES: dict[str, float] = {
     "SBER": 312.5,
@@ -115,6 +116,11 @@ def _save_deposits() -> None:
         _save_jsonl(SEED_DIR / "deposits.jsonl", _deposits)
 
 
+def _save_mortgages() -> None:
+    if SEED_DIR:
+        _save_jsonl(SEED_DIR / "mortgages.jsonl", _mortgages)
+
+
 def _load_seed() -> None:
     if not SEED_DIR:
         return
@@ -134,6 +140,7 @@ def _load_seed() -> None:
     _corporate_payments.extend(_load_jsonl(SEED_DIR / "corporate_payments.jsonl"))
     _loans.extend(_load_jsonl(SEED_DIR / "loans.jsonl"))
     _deposits.extend(_load_jsonl(SEED_DIR / "deposits.jsonl"))
+    _mortgages.extend(_load_jsonl(SEED_DIR / "mortgages.jsonl"))
 
 
 _load_seed()
@@ -623,3 +630,40 @@ async def create_deposit(payload: dict) -> dict:
         "maturity_date": maturity_date,
         "new_balance_rub": int(client["balance_rub"]),
     }
+
+
+@app.post("/mortgages")
+async def create_mortgage(payload: dict) -> dict:
+    customer_id = payload.get("customer_id")
+    property_price_rub = int(payload.get("property_price_rub") or 0)
+    down_payment_rub = int(payload.get("down_payment_rub") or 0)
+    loan_amount_rub = int(payload.get("loan_amount_rub") or 0)
+    term_years = int(payload.get("term_years") or 0)
+    rate_pct = float(payload.get("rate_pct") or 0)
+    if not customer_id or customer_id not in _clients_by_id:
+        raise HTTPException(status_code=404, detail="клиент не найден")
+    if loan_amount_rub <= 0:
+        raise HTTPException(status_code=400, detail="сумма кредита должна быть положительной")
+    if term_years <= 0:
+        raise HTTPException(status_code=400, detail="срок должен быть положительным")
+    if rate_pct <= 0:
+        raise HTTPException(status_code=400, detail="ставка должна быть положительной")
+    # Та же аннуитетная формула, что у cib — чтобы платёж всегда совпадал.
+    monthly_payment_rub = _monthly_payment(loan_amount_rub, rate_pct, term_years * 12)
+    mortgage_id = f"mort-{uuid.uuid4().hex[:8]}"
+    created_at = datetime.now().replace(microsecond=0).isoformat()
+    mortgage = {
+        "mortgage_id": mortgage_id,
+        "customer_id": customer_id,
+        "property_price_rub": property_price_rub,
+        "down_payment_rub": down_payment_rub,
+        "loan_amount_rub": loan_amount_rub,
+        "term_years": term_years,
+        "rate_pct": rate_pct,
+        "monthly_payment_rub": monthly_payment_rub,
+        "status": "active",
+        "created_at": created_at,
+    }
+    _mortgages.append(mortgage)
+    _save_mortgages()
+    return mortgage
