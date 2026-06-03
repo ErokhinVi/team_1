@@ -315,7 +315,15 @@ async def create_brokerage_order(payload: dict) -> dict:
         raise HTTPException(status_code=400, detail="direction должен быть 'buy' или 'sell'")
     account = _brokerage_accounts.get(customer_id)
     if not account:
-        raise HTTPException(status_code=404, detail="брокерский счёт не найден, сначала создайте его")
+        account = {
+            "account_id": f"brok-{customer_id}",
+            "customer_id": customer_id,
+            "balance_rub": 0.0,
+            "status": "active",
+            "created_at": datetime.now().replace(microsecond=0).isoformat(),
+        }
+        _brokerage_accounts[customer_id] = account
+        _save_brokerage()
     price = MOCK_PRICES[ticker]
     total_rub = round(price * quantity, 2)
     if direction == "buy":
