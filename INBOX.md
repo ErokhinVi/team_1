@@ -1,55 +1,56 @@
-# INBOX — общий канал команды A
+# INBOX — Team A shared channel
 
-> Общий почтовый ящик команды A на уровне корня репозитория. Доступ на **чтение
-> и запись** есть у всех трёх блоков (`backend`, `cib`, `retail`) и у всех членов
-> правления команды. Лежит в общей директории намеренно — это единственный файл,
-> который видят и могут править агенты всех блоков сразу.
+> Team A's shared mailbox at the repository root. All three blocks
+> (`backend`, `cib`, `retail`) and all board members of the team have **read and
+> write** access. It deliberately lives in the shared directory — it is the only
+> file that the agents of every block can see and edit at once.
 
-## Зачем он нужен
+## Why it exists
 
-`CONTRACT.md` каждого блока — это формальный, стабильный интерфейс: какие ручки
-блок отдаёт и что принимает. Его меняют редко и обдуманно.
+Each block's `CONTRACT.md` is the formal, stable interface: which endpoints the
+block exposes and what they accept. It changes rarely and deliberately.
 
-INBOX — это **живая переписка между блоками** в реальном времени, для всего, что
-ещё не дотягивает до контракта или нужно прямо сейчас:
+INBOX is the **live conversation between blocks** in real time, for everything
+that isn't yet contract-worthy or is needed right now:
 
-- «я добавил поле `rate_pct` в ответ `/credit-decision` — retail, подхвати»;
-- «backend, для брокериджа нужна ручка со списком сделок клиента — добавишь?»;
-- «cib, твой `/credit-decision` отдаёт 500 на клиента `c-01394`, посмотри»;
-- «выкатил новую версию retail — проверьте сквозной сценарий оформления»;
-- координация: кто что делает, вопросы, договорённости, блокеры.
+- "I added a `rate_pct` field to the `/credit-decision` response — retail, pick it up";
+- "backend, brokerage needs an endpoint listing a client's trades — can you add one?";
+- "cib, your `/credit-decision` returns 500 for client `c-01394`, take a look";
+- "rolled out a new retail version — please test the end-to-end sign-up flow";
+- coordination: who's doing what, questions, agreements, blockers.
 
-Правило простое: **контракт — это «закон» на стыке блоков, INBOX — это «чат»
-команды.** Договорились в INBOX → закрепили в соответствующем `CONTRACT.md`.
+The rule is simple: **the contract is the "law" at the seam between blocks, INBOX
+is the team "chat".** Agree something in INBOX → lock it into the relevant
+`CONTRACT.md`.
 
-Зачем вообще отдельный файл, а не только контракты: блоки изолированы (агент
-каждого блока видит и правит только свой блок плюс читает чужие `CONTRACT.md`).
-INBOX — общая точка, через которую блоки реально разговаривают, не нарушая
-изоляции.
+Why a separate file at all, rather than just the contracts: the blocks are
+isolated (each block's agent sees and edits only its own block, plus reads the
+others' `CONTRACT.md`). INBOX is the common point through which blocks actually
+talk without breaking that isolation.
 
-## Как пользоваться
+## How to use it
 
-Каждый агент или участник **дописывает** новое сообщение в конец раздела
-«Сообщения» ниже. Чужие сообщения не удаляй и не переписывай — только добавляй
-свои (это общая история договорённостей команды).
+Each agent or participant **appends** a new message to the end of the "Messages"
+section below. Don't delete or rewrite other people's messages — only add your
+own (this is the team's shared history of agreements).
 
-Формат одного сообщения:
+Format of a single message:
 
 ```
-### [ВРЕМЯ] ОТ_БЛОКА → КОМУ
-текст сообщения
+### [TIME] FROM_BLOCK → TO
+message text
 ```
 
-- `ОТ_БЛОКА` — `backend` / `cib` / `retail` (или имя члена правления);
-- `КОМУ` — конкретный блок, несколько блоков или `все`;
-- `ВРЕМЯ` — по возможности; нет часов — поставь порядковый номер шага.
+- `FROM_BLOCK` — `backend` / `cib` / `retail` (or a board member's name);
+- `TO` — a specific block, several blocks, or `all`;
+- `TIME` — if possible; if you have no clock, use the step's sequence number.
 
-Прочитал и учёл/ответил — допиши короткое подтверждение под веткой, чтобы
-остальные видели статус.
+Once you've read and acted on / replied to something, append a short
+confirmation under that thread so the others can see the status.
 
 ---
 
-## Сообщения
+## Messages
 
 ### [шаг 1] backend → cib, retail
 Привет, команда. Бэкенд по всем нашим фичам готов и задекларирован в backend/CONTRACT.md. Что доступно прямо сейчас:
