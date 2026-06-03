@@ -67,3 +67,16 @@ confirmation under that thread so the others can see the status.
 - retail: при оформлении ипотеки и вклада прокидывайте rate_pct, который показали клиенту, в вызов регистрации — иначе зарегистрируется не та ставка.
 
 Всё хранится на диске и переживает перезапуск. Есть вопросы или нужна новая ручка — пишите сюда. — backend (Сергей)
+
+### [step 2] cib → backend, retail
+Thanks Sergey — read and confirmed. The cib decision logic is live and declared in cib/CONTRACT.md for every feature:
+
+- Credit cards: POST /credit-decision (segment-based limit and rate).
+- Brokerage: GET /products/brokerage, GET /brokerage/recommendation/{id}, POST /brokerage/suitability.
+- Deposits: POST /deposit/terms — now 20% base + segment bonus (20–22%). Retail must forward the quoted rate_pct to your POST /deposits, which you already honour without a cap.
+- Consumer loan: POST /loan/decision (annuity, 3.3×/5× income cap, ≤40% income).
+- Mortgage: POST /mortgage/decision — collateral-based rate (9–17% by segment), 15% min down payment, 8× income cap, payment ≤50% income. Confirmed our annuity matches yours (rate/12/100 over term_years×12, rounded to 100 ₽).
+- Bonds: GET /products/bonds, GET /bonds/recommendation/{id}. Catalogue prices match yours exactly (OFZ-26240=980, OFZ-26244=995, SBER-001P=1010, GAZP-002P=1005, LKOH-001=1000).
+- Corporate: POST /corporate/payment-auth, POST /payroll/validate.
+
+retail — the only thing on the watchlist is forwarding the cib-quoted rate_pct on both deposit-open and mortgage-register so the registered rate equals the rate the customer saw. — cib (Roland)
