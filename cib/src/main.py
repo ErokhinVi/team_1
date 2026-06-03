@@ -297,36 +297,43 @@ async def corporate_payment_auth(req: CorpPaymentAuthRequest) -> dict:
 
 @app.post("/payroll/validate")
 async def payroll_validate(req: PayrollValidateRequest) -> dict:
+    # Use the FULL roster (incl. staff who aren't customers yet) so the payroll
+    # total covers everyone who will be paid — payroll is an acquisition channel.
     async with httpx.AsyncClient(timeout=10) as client:
-        employer_resp, employees_resp = await asyncio.gather(
+        employer_resp, roster_resp = await asyncio.gather(
             client.get(f"{BACKEND_URL}/corporate/accounts/{req.employer_id}"),
-            client.get(f"{BACKEND_URL}/corporate/{req.employer_id}/employees"),
+            client.get(f"{BACKEND_URL}/corporate/{req.employer_id}/roster"),
         )
 
-    if employer_resp.status_code == 404:
+    if employer_resp.status_code == 404 or roster_resp.status_code == 404:
         raise HTTPException(status_code=404, detail="Employer not found")
-    if employer_resp.status_code != 200 or employees_resp.status_code not in (200, 404):
+    if employer_resp.status_code != 200 or roster_resp.status_code != 200:
         raise HTTPException(status_code=502, detail="Backend unavailable")
 
     employer = employer_resp.json()
     balance_rub = employer.get("balance_rub", 0)
+    # Corporate accounts don't carry an overdue flag; treat missing as "none on record".
+    has_overdue = employer.get("has_overdue_history", False)
 
-    if employees_resp.status_code == 404:
-        return {"eligible": False, "reason": "No employees found for this employer", "total_payroll_rub": 0, "employees_count": 0}
+    roster = roster_resp.json().get("items", [])
+    if not roster:
+        return {"eligible": False, "reason": "No staff on the employer's roster",
+                "total_payroll_rub": 0, "employees_count": 0}
 
-    employees = employees_resp.json().get("items", [])
-    if not employees:
-        return {"eligible": False, "reason": "No employees found for this employer", "total_payroll_rub": 0, "employees_count": 0}
+    total_payroll_rub = sum(int(e.get("income_rub", 0)) for e in roster)
+    employees_count = len(roster)
 
-    total_payroll_rub = sum(int(e.get("income_rub", 0)) for e in employees)
+    if has_overdue:
+        return {"eligible": False, "reason": "Declined: employer has overdue obligations",
+                "total_payroll_rub": total_payroll_rub, "employees_count": employees_count}
 
     if balance_rub < total_payroll_rub:
         return {"eligible": False,
                 "reason": f"Insufficient funds: balance {balance_rub:,.0f} RUB, payroll {total_payroll_rub:,.0f} RUB",
-                "total_payroll_rub": total_payroll_rub, "employees_count": len(employees)}
+                "total_payroll_rub": total_payroll_rub, "employees_count": employees_count}
 
     return {"eligible": True, "reason": "Employer is eligible: sufficient funds for full payroll",
-            "total_payroll_rub": total_payroll_rub, "employees_count": len(employees)}
+            "total_payroll_rub": total_payroll_rub, "employees_count": employees_count}
 
 
 @app.post("/loan/decision")

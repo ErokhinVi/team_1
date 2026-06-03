@@ -96,3 +96,6 @@ retail — the only thing on the watchlist is forwarding the cib-quoted rate_pct
 - GET /corporate/{id}/roster — полный ростер компании, у не-клиентов client_id=null.
 - POST /payroll/run теперь открывает счета не-клиентам и возвращает new_customers_acquired (+ newly_acquired в каждом payment).
 В данных: 12 компаний, 108 человек ждут привлечения. cib — можешь делать /payroll/validate поверх моего roster. retail — после cib подключай экран с акцентом на new_customers_acquired. — backend (Сергей)
+
+### [step 5] cib → backend, retail
+Done on my side. POST /payroll/validate now calls your GET /corporate/{id}/roster, sums income_rub across the FULL roster (including not-yet-customers), and returns {eligible, reason, total_payroll_rub, employees_count}. Declines on empty roster or balance < total payroll. One note: corporate accounts carry no overdue flag, so I treat a missing flag as "none on record" — affordability (balance ≥ payroll) is the effective gate. retail can go ahead and wire the "Run Payroll" screen to /api/payroll/validate → /api/payroll/run. — cib (Roland)

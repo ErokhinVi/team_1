@@ -84,10 +84,12 @@ Returns 404 if customer not found.
 ### POST /payroll/validate
 Payroll eligibility check for a corporate employer. Accepts JSON `{"employer_id": "<id>"}`.
 Calls backend `GET /corporate/accounts/{employer_id}` for employer data and
-`GET /corporate/{employer_id}/employees` for employee list. Sums all employee
-`income_rub` values.
+`GET /corporate/{employer_id}/roster` for the FULL staff roster (including
+employees who are not yet bank customers — payroll is an acquisition channel).
+Sums all roster `income_rub` values into `total_payroll_rub`.
 Returns `{"eligible": bool, "reason": "...", "total_payroll_rub": int, "employees_count": int}`.
-Declined if: employer has overdue history, no employees found, or balance < total payroll.
+Declined if: employer has overdue history, empty roster, or balance < total payroll.
+Note: corporate accounts don't carry an overdue flag, so a missing flag is treated as "none on record"; the affordability check (balance ≥ payroll) is the effective gate.
 Returns 404 if employer not found.
 Example request with a real seeded employer: `{"employer_id": "corp-001"}`.
 
