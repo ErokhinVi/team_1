@@ -56,6 +56,9 @@ _bond_holdings: dict[str, dict[str, dict[str, Any]]] = {}
 _bond_orders: list[dict[str, Any]] = []
 # Ростер сотрудников компаний (включая ещё-не-клиентов): для зарплатного привлечения
 _company_roster: list[dict[str, Any]] = []
+_referrals: list[dict[str, Any]] = []
+
+REFERRAL_BONUS_RUB = 20000
 
 MOCK_PRICES: dict[str, float] = {
     "SBER": 312.5,
@@ -140,6 +143,11 @@ def _save_roster() -> None:
         _save_jsonl(SEED_DIR / "company_roster.jsonl", _company_roster)
 
 
+def _save_referrals() -> None:
+    if SEED_DIR:
+        _save_jsonl(SEED_DIR / "referrals.jsonl", _referrals)
+
+
 def _save_bonds() -> None:
     if SEED_DIR:
         flat = [
@@ -178,6 +186,7 @@ def _load_seed() -> None:
         }
     _bond_orders.extend(_load_jsonl(SEED_DIR / "bond_orders.jsonl"))
     _company_roster.extend(_load_jsonl(SEED_DIR / "company_roster.jsonl"))
+    _referrals.extend(_load_jsonl(SEED_DIR / "referrals.jsonl"))
 
 
 _load_seed()
@@ -826,3 +835,62 @@ async def create_bond_order(payload: dict) -> dict:
         "total_rub": total_rub,
         "new_balance_rub": int(client["balance_rub"]),
     }
+
+
+@app.post("/referrals")
+async def create_referral(payload: dict) -> dict:
+    referrer_id = payload.get("referrer_id")
+    new_customer_name = (payload.get("new_customer_name") or "").strip()
+    if not referrer_id or referrer_id not in _clients_by_id:
+        raise HTTPException(status_code=404, detail="пригласивший клиент не найден")
+    if not new_customer_name:
+        raise HTTPException(status_code=400, detail="укажите имя приглашённого друга")
+    referrer = _clients_by_id[referrer_id]
+    # Открываем счёт другу (привлечение).
+    new_id = _next_client_id()
+    new_customer = {
+        "id": new_id,
+        "name": new_customer_name,
+        "segment": "mass",
+        "income_rub": 0,
+        "balance_rub": REFERRAL_BONUS_RUB,
+        "products": [],
+        "risk_score": 0.3,
+        "has_overdue_history": False,
+        "joined_at": datetime.now().date().isoformat(),
+        "acquired_via": "referral",
+        "referred_by": referrer_id,
+    }
+    _clients.append(new_customer)
+    _clients_by_id[new_id] = new_customer
+    # Бонус обоим.
+    referrer["balance_rub"] = round(referrer["balance_rub"] + REFERRAL_BONUS_RUB, 2)
+    referral_id = f"ref-{uuid.uuid4().hex[:8]}"
+    referral = {
+        "referral_id": referral_id,
+        "referrer_id": referrer_id,
+        "new_customer_id": new_id,
+        "new_customer_name": new_customer_name,
+        "bonus_rub": REFERRAL_BONUS_RUB,
+        "ts": datetime.now().replace(microsecond=0).isoformat(),
+    }
+    _referrals.append(referral)
+    _save_clients()
+    _save_referrals()
+    return {
+        "referral_id": referral_id,
+        "referrer_id": referrer_id,
+        "new_customer_id": new_id,
+        "new_customer_name": new_customer_name,
+        "bonus_rub": REFERRAL_BONUS_RUB,
+        "referrer_new_balance_rub": int(referrer["balance_rub"]),
+        "new_customer_balance_rub": int(new_customer["balance_rub"]),
+    }
+
+
+@app.get("/referrals/{referrer_id}")
+async def list_referrals(referrer_id: str) -> dict:
+    if referrer_id not in _clients_by_id:
+        raise HTTPException(status_code=404, detail="клиент не найден")
+    items = [r for r in _referrals if r["referrer_id"] == referrer_id]
+    return {"total": len(items), "items": items}

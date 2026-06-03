@@ -31,6 +31,7 @@ def simulate_restart():
     main._bond_holdings.clear()
     main._bond_orders.clear()
     main._company_roster.clear()
+    main._referrals.clear()
     main._load_seed()
 
 
@@ -673,6 +674,42 @@ def test_bonds_order_customer_not_found():
         "customer_id": "bad-id", "bond_id": "OFZ-26240", "quantity": 1, "direction": "buy"
     })
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Referral program — both parties get 20 000 ₽
+# ---------------------------------------------------------------------------
+
+def test_referral_pays_both_and_acquires_customer():
+    cid = first_client_id()
+    before = client.get(f"/clients/{cid}").json()["balance_rub"]
+    total_before = client.get("/clients?limit=500").json()["total"]
+    r = client.post("/referrals", json={"referrer_id": cid, "new_customer_name": "Друг Тестовый"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["bonus_rub"] == 20000
+    assert data["referrer_new_balance_rub"] == round(before) + 20000
+    assert data["new_customer_balance_rub"] == 20000
+    # the friend is now a real customer
+    total_after = client.get("/clients?limit=500").json()["total"]
+    assert total_after == total_before + 1
+    assert client.get(f"/clients/{data['new_customer_id']}").status_code == 200
+
+def test_referral_referrer_not_found():
+    r = client.post("/referrals", json={"referrer_id": "bad-id", "new_customer_name": "Кто-то"})
+    assert r.status_code == 404
+
+def test_referral_missing_name():
+    cid = first_client_id()
+    r = client.post("/referrals", json={"referrer_id": cid, "new_customer_name": ""})
+    assert r.status_code == 400
+
+def test_list_referrals():
+    cid = first_client_id()
+    client.post("/referrals", json={"referrer_id": cid, "new_customer_name": "Друг Два"})
+    r = client.get(f"/referrals/{cid}")
+    assert r.status_code == 200
+    assert r.json()["total"] >= 1
 
 
 # ---------------------------------------------------------------------------

@@ -111,6 +111,16 @@ Seeded corporate ids имеют формат `corp-001`, `corp-002`, `corp-003`.
 Позиции сохраняются на диск (переживают перезапуск). Возвращает `{order_id, status, bond_id, direction, quantity, total_rub, new_balance_rub}`.
 Ошибка `404` если клиент не найден, `400` при нехватке средств, нехватке облигаций для продажи, или неверных параметрах.
 
+### POST /referrals
+Реферальная программа «Приведи друга — оба получите 20 000 ₽». Принимает JSON `{referrer_id, new_customer_name}`.
+Открывает счёт другу (сегмент `mass`, `acquired_via: referral`) и начисляет бонус 20 000 ₽ обоим — пригласившему и новому клиенту.
+Возвращает `{referral_id, referrer_id, new_customer_id, new_customer_name, bonus_rub, referrer_new_balance_rub, new_customer_balance_rub}`.
+Новый счёт сохраняется на диск (переживает перезапуск). Ошибка `404` если пригласивший не найден, `400` если не указано имя друга.
+
+### GET /referrals/{referrer_id}
+Список приглашений клиента. Возвращает `{total, items: [{referral_id, referrer_id, new_customer_id, new_customer_name, bonus_rub, ts}]}`.
+Ошибка `404` если клиент не найден.
+
 ### GET /corporate/{client_id}/employees
 Список сотрудников корпоративного клиента, у которых есть счёт в банке.
 Возвращает `{total, items: [{id, name, income_rub, balance_rub}]}`.
