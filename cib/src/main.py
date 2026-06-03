@@ -182,7 +182,7 @@ async def brokerage_suitability(req: SuitabilityRequest) -> dict:
 @app.post("/corporate/payment-auth")
 async def corporate_payment_auth(req: CorpPaymentAuthRequest) -> dict:
     async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(f"{BACKEND_URL}/clients/{req.corporate_client_id}")
+        resp = await client.get(f"{BACKEND_URL}/corporate/accounts/{req.corporate_client_id}")
 
     if resp.status_code == 404:
         raise HTTPException(status_code=404, detail="Corporate client not found")
