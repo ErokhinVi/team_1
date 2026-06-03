@@ -67,6 +67,46 @@ async def api_transfer(payload: dict) -> dict:
     return r.json()
 
 
+@app.get("/corporate", response_class=HTMLResponse)
+async def corporate_page() -> str:
+    f = STATIC_DIR / "corporate.html"
+    return f.read_text(encoding="utf-8") if f.exists() else "<h1>Corporate Banking</h1>"
+
+
+@app.get("/api/corporate/account/{account_id}")
+async def corporate_account(account_id: str) -> dict:
+    return await _backend_get(f"/corporate/accounts/{account_id}")
+
+
+@app.post("/api/corporate/payments")
+async def corporate_payment(payload: dict) -> dict:
+    auth_payload = {
+        "corporate_client_id": payload.get("from_account_id"),
+        "amount_rub": payload.get("amount_rub"),
+        "counterparty": payload.get("to_account_id"),
+        "purpose": payload.get("purpose"),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            auth_r = await client.post(f"{CIB_URL}/corporate/payment-auth",
+                                       json=auth_payload)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"cib недоступен: {exc}")
+    if auth_r.status_code != 200:
+        raise HTTPException(status_code=auth_r.status_code, detail=auth_r.text[:300])
+    auth = auth_r.json()
+    if not auth.get("approved"):
+        return {"approved": False, "reason": auth.get("reason", "платёж не авторизован")}
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            pay_r = await client.post(f"{BACKEND_URL}/corporate/payments", json=payload)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"backend недоступен: {exc}")
+    if pay_r.status_code != 200:
+        raise HTTPException(status_code=pay_r.status_code, detail=pay_r.text[:300])
+    return {**pay_r.json(), "approved": True}
+
+
 @app.get("/brokerage", response_class=HTMLResponse)
 async def brokerage_page() -> str:
     f = STATIC_DIR / "brokerage.html"

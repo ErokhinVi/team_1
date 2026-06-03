@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=414,initial-scale=1" />
+  <title>Райф · Corporate Banking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f6f3ec; --surface: #ffffff; --rule: #e3ddcc;
+      --text: #1f1d18; --text-2: #5a564c; --muted: #8a857a;
+      --raiff: #FFE600; --good: #2f7a3a; --warn: #a4662d; --bad: #b14b32;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text);
+      font-family: "Geist", -apple-system, system-ui, sans-serif;
+      font-size: 14px; min-height: 100vh; }
+    .phone { max-width: 420px; margin: 0 auto; background: var(--surface);
+      min-height: 100vh; box-shadow: 0 0 60px rgba(60,52,40,0.08); }
+    .topbar { background: var(--text); color: var(--bg); padding: 28px 22px 16px; }
+    .topbar .logo { width: 26px; height: 26px; background: var(--raiff);
+      display: inline-block; border-radius: 4px; vertical-align: middle; margin-right: 10px; }
+    .topbar .name { font-weight: 500; font-size: 16px; vertical-align: middle; }
+    .topbar .sub { font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+    .back-link { display: inline-block; margin: 16px 22px 0;
+      font-size: 13px; color: var(--text-2); text-decoration: none; }
+    .back-link:hover { color: var(--text); }
+
+    .account-box {
+      margin: 16px 22px 0;
+      background: linear-gradient(135deg, var(--text) 0%, #2c2823 100%);
+      border-radius: 12px; padding: 20px; color: var(--bg);
+    }
+    .account-box .company { font-weight: 600; font-size: 16px; }
+    .account-box .industry { font-size: 12px; opacity: 0.6; margin-top: 2px; }
+    .account-box .balance-l { font-size: 10px; opacity: 0.6; text-transform: uppercase;
+      letter-spacing: 0.1em; margin-top: 18px; }
+    .account-box .balance-v { font-size: 28px; font-weight: 500; margin-top: 4px; }
+    .account-box .account-id { font-size: 11px; opacity: 0.4; margin-top: 6px; }
+
+    .lookup-section { padding: 20px 22px 0; }
+    .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em;
+      color: var(--muted); margin-bottom: 10px; }
+    .form-row { margin-bottom: 14px; }
+    .form-row label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
+    .form-row input { width: 100%; padding: 10px 12px; background: var(--bg); color: var(--text);
+      border: 1px solid var(--rule); border-radius: 6px; font-family: inherit; font-size: 14px; }
+    .form-row input:focus { outline: 0; border-color: var(--text); }
+    .btn { width: 100%; padding: 13px; background: var(--text); color: var(--bg);
+      border: 0; border-radius: 8px; font-family: inherit; font-weight: 500;
+      font-size: 14px; cursor: pointer; transition: background 160ms; }
+    .btn:hover { background: #2c2823; }
+    .btn.primary { background: var(--raiff); color: var(--text); }
+    .btn.primary:hover { background: #fff04a; }
+    .alert { margin-top: 14px; padding: 12px 14px; border-radius: 6px;
+      font-size: 13px; line-height: 1.5; }
+    .alert.ok { background: #e8f0e2; color: var(--good); }
+    .alert.error { background: #f4dfd6; color: var(--bad); }
+    .alert.info { background: #f0e8d0; color: var(--warn); }
+    .spinner { text-align: center; padding: 20px 0; color: var(--muted); font-size: 13px; }
+    .payment-section { padding: 20px 22px 40px; }
+    .divider { height: 1px; background: var(--rule); margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="topbar">
+      <div><span class="logo"></span><span class="name">Райф</span></div>
+      <div class="sub">Corporate Banking</div>
+    </div>
+
+    <a class="back-link" href="/">← Back to main</a>
+
+    <div class="lookup-section">
+      <div class="section-title">Account lookup</div>
+      <div class="form-row">
+        <label>Corporate account ID</label>
+        <input id="account-id-input" placeholder="e.g. corp-001" />
+      </div>
+      <button class="btn primary" id="load-account-btn">Load account</button>
+      <div id="load-result"></div>
+    </div>
+
+    <div id="account-section" style="display:none">
+      <div class="account-box" id="account-box"></div>
+
+      <div class="divider" style="margin:20px 22px 0"></div>
+
+      <div class="payment-section">
+        <div class="section-title">Make a payment</div>
+        <div class="form-row">
+          <label>Recipient account ID</label>
+          <input id="pay-to" placeholder="e.g. corp-002" />
+        </div>
+        <div class="form-row">
+          <label>Amount, ₽</label>
+          <input id="pay-amount" type="number" min="1" placeholder="0" />
+        </div>
+        <div class="form-row">
+          <label>Payment purpose</label>
+          <input id="pay-purpose" placeholder="e.g. Services rendered Q2" />
+        </div>
+        <button class="btn primary" id="pay-btn">Send payment</button>
+        <div id="pay-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    "use strict";
+    const fmt = new Intl.NumberFormat("ru-RU");
+    let currentAccountId = null;
+    let currentBalance = 0;
+
+    const loadBtn = document.getElementById("load-account-btn");
+    const loadResult = document.getElementById("load-result");
+    const accountSection = document.getElementById("account-section");
+    const accountBox = document.getElementById("account-box");
+    const payResult = document.getElementById("pay-result");
+
+    loadBtn.addEventListener("click", async () => {
+      const accountId = document.getElementById("account-id-input").value.trim();
+      if (!accountId) {
+        loadResult.innerHTML = `<div class="alert error">Enter an account ID</div>`;
+        return;
+      }
+      loadResult.innerHTML = `<div class="alert info">Loading…</div>`;
+      accountSection.style.display = "none";
+      try {
+        const r = await fetch(`/api/corporate/account/${accountId}`);
+        const d = await r.json();
+        if (!r.ok) {
+          loadResult.innerHTML = `<div class="alert error">${d.detail || "Account not found"}</div>`;
+          return;
+        }
+        currentAccountId = accountId;
+        currentBalance = d.balance_rub || 0;
+        accountBox.innerHTML = `
+          <div class="company">${d.company_name || d.name || accountId}</div>
+          <div class="industry">${d.industry || d.segment || ""}</div>
+          <div class="balance-l">Account balance</div>
+          <div class="balance-v">${fmt.format(currentBalance)} ₽</div>
+          <div class="account-id">ID: ${accountId}</div>
+        `;
+        accountSection.style.display = "block";
+        loadResult.innerHTML = "";
+        payResult.innerHTML = "";
+      } catch(e) {
+        loadResult.innerHTML = `<div class="alert error">Server did not respond</div>`;
+      }
+    });
+
+    document.getElementById("pay-btn").addEventListener("click", async () => {
+      if (!currentAccountId) return;
+      const toId = document.getElementById("pay-to").value.trim();
+      const amount = +document.getElementById("pay-amount").value;
+      const purpose = document.getElementById("pay-purpose").value.trim();
+      if (!toId || !amount || amount <= 0 || !purpose) {
+        payResult.innerHTML = `<div class="alert error">Fill in all fields</div>`;
+        return;
+      }
+      payResult.innerHTML = `<div class="alert info">Authorising payment…</div>`;
+      try {
+        const r = await fetch("/api/corporate/payments", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            from_account_id: currentAccountId,
+            to_account_id: toId,
+            amount_rub: amount,
+            purpose: purpose,
+          }),
+        });
+        const d = await r.json();
+        if (r.ok && d.approved !== false) {
+          const newBal = d.new_balance_rub !== undefined ? d.new_balance_rub : currentBalance - amount;
+          currentBalance = newBal;
+          accountBox.querySelector(".balance-v").textContent = fmt.format(newBal) + " ₽";
+          payResult.innerHTML = `<div class="alert ok">
+            Payment sent: ${fmt.format(amount)} ₽<br/>
+            To: ${toId}<br/>
+            Purpose: ${purpose}<br/>
+            New balance: ${fmt.format(newBal)} ₽
+          </div>`;
+          document.getElementById("pay-to").value = "";
+          document.getElementById("pay-amount").value = "";
+          document.getElementById("pay-purpose").value = "";
+        } else if (d.approved === false) {
+          payResult.innerHTML = `<div class="alert error">Payment declined: ${d.reason || "not authorised"}</div>`;
+        } else {
+          payResult.innerHTML = `<div class="alert error">${d.detail || "Error"}</div>`;
+        }
+      } catch(e) {
+        payResult.innerHTML = `<div class="alert error">Server did not respond</div>`;
+      }
+    });
+  })();
+  </script>
+</body>
+</html>
