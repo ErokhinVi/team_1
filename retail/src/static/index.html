@@ -260,6 +260,7 @@
       <button class="tab active" data-tab="transfers" data-i18n="tab_transfers">Переводы</button>
       <button class="tab" data-tab="credit" data-i18n="tab_credit">Кредитная карта</button>
       <button class="tab" data-tab="loan">Кредит наличными</button>
+      <button class="tab" data-tab="mortgage">Ипотека</button>
       <button class="tab" data-tab="deposit">Вклад</button>
     </div>
 
@@ -323,6 +324,40 @@
         <button class="btn primary" id="loan-confirm-btn" style="margin-top:14px;">Получить деньги</button>
       </div>
       <div id="loan-disburse-result"></div>
+    </div>
+
+    <div class="tab-pane" data-pane="mortgage">
+      <div class="section-title">Ипотека на покупку жилья</div>
+      <div class="form-row">
+        <label>Клиент</label>
+        <select id="mortgage-client-select"></select>
+      </div>
+      <div class="form-row">
+        <label>Стоимость жилья, ₽</label>
+        <input id="mortgage-price" type="number" min="500000" placeholder="например, 8 000 000" />
+      </div>
+      <div class="form-row">
+        <label>Первоначальный взнос, ₽</label>
+        <input id="mortgage-down" type="number" min="0" placeholder="например, 1 600 000" />
+      </div>
+      <div class="form-row">
+        <label>Срок</label>
+        <select id="mortgage-term">
+          <option value="10">10 лет</option>
+          <option value="15">15 лет</option>
+          <option value="20" selected>20 лет</option>
+          <option value="25">25 лет</option>
+          <option value="30">30 лет</option>
+        </select>
+      </div>
+      <button class="btn primary" id="mortgage-check-btn">Рассчитать ипотеку</button>
+      <div id="mortgage-check-result"></div>
+      <div id="mortgage-offer" style="display:none;margin-top:16px;padding:16px;border:1px solid var(--rule);border-radius:10px;">
+        <div class="section-title" style="margin-top:0">Предложение по ипотеке</div>
+        <div id="mortgage-offer-details"></div>
+        <button class="btn primary" id="mortgage-confirm-btn" style="margin-top:14px;">Оформить ипотеку</button>
+      </div>
+      <div id="mortgage-register-result"></div>
     </div>
 
     <div class="tab-pane" data-pane="deposit">
@@ -567,6 +602,9 @@
           `<option value="${c.id}">${c.name}</option>`
         ).join("");
         depositClientSel.innerHTML = items.map(c =>
+          `<option value="${c.id}">${c.name}</option>`
+        ).join("");
+        mortgageClientSel.innerHTML = items.map(c =>
           `<option value="${c.id}">${c.name}</option>`
         ).join("");
         showPreApproval();
@@ -897,6 +935,90 @@
 
     // populate loan client selector when clients load
     const _origLoadClients = loadClients;
+
+    // ---- mortgage tab ----
+    const mortgageClientSel = document.getElementById("mortgage-client-select");
+    const mortgageCheckBtn = document.getElementById("mortgage-check-btn");
+    const mortgageCheckResult = document.getElementById("mortgage-check-result");
+    const mortgageOffer = document.getElementById("mortgage-offer");
+    const mortgageOfferDetails = document.getElementById("mortgage-offer-details");
+    const mortgageConfirmBtn = document.getElementById("mortgage-confirm-btn");
+    const mortgageRegisterResult = document.getElementById("mortgage-register-result");
+    let pendingMortgage = null;
+
+    mortgageCheckBtn.addEventListener("click", async () => {
+      const clientId = mortgageClientSel.value;
+      const price = +document.getElementById("mortgage-price").value;
+      const down = +document.getElementById("mortgage-down").value;
+      const term = +document.getElementById("mortgage-term").value;
+      if (!clientId || !price || price < 500000) {
+        mortgageCheckResult.innerHTML = `<div class="alert error">Укажите стоимость жилья от 500 000 ₽</div>`;
+        return;
+      }
+      if (down < 0 || down >= price) {
+        mortgageCheckResult.innerHTML = `<div class="alert error">Взнос должен быть меньше стоимости жилья</div>`;
+        return;
+      }
+      mortgageOffer.style.display = "none";
+      mortgageRegisterResult.innerHTML = "";
+      mortgageCheckResult.innerHTML = `<div class="alert info">Рассчитываем условия…</div>`;
+      try {
+        const r = await fetch("/api/mortgage/decision", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({customer_id: clientId, property_price_rub: price, down_payment_rub: down, term_years: term}),
+        });
+        const d = await r.json();
+        if (!r.ok) { mortgageCheckResult.innerHTML = `<div class="alert error">${d.detail || "ошибка"}</div>`; return; }
+        if (!d.approved) { mortgageCheckResult.innerHTML = `<div class="alert error">Отказ: ${d.reason || "нет данных"}</div>`; return; }
+        mortgageCheckResult.innerHTML = "";
+        pendingMortgage = {
+          customer_id: clientId,
+          property_price_rub: d.property_price_rub,
+          down_payment_rub: d.down_payment_rub,
+          loan_amount_rub: d.loan_amount_rub,
+          term_years: d.term_years,
+          rate_pct: d.rate_pct,
+        };
+        mortgageOfferDetails.innerHTML = `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div><div style="font-size:11px;color:var(--muted)">Сумма кредита</div><div style="font-weight:600">${fmt.format(d.loan_amount_rub)} ₽</div></div>
+            <div><div style="font-size:11px;color:var(--muted)">Первый взнос</div><div style="font-weight:600">${fmt.format(d.down_payment_rub)} ₽</div></div>
+            <div><div style="font-size:11px;color:var(--muted)">Ставка</div><div style="font-weight:600">${d.rate_pct}% годовых</div></div>
+            <div><div style="font-size:11px;color:var(--muted)">Платёж</div><div style="font-weight:600">${fmt.format(d.monthly_payment_rub)} ₽/мес</div></div>
+          </div>`;
+        mortgageOffer.style.display = "block";
+      } catch(e) { mortgageCheckResult.innerHTML = `<div class="alert error">Сервер не ответил</div>`; }
+    });
+
+    mortgageConfirmBtn.addEventListener("click", async () => {
+      if (!pendingMortgage) return;
+      mortgageOffer.style.display = "none";
+      mortgageRegisterResult.innerHTML = `<div class="alert info">Оформляем ипотеку…</div>`;
+      try {
+        const r = await fetch("/api/mortgage/register", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(pendingMortgage),
+        });
+        const d = await r.json();
+        if (r.ok) {
+          mortgageRegisterResult.innerHTML = `<div class="alert ok">
+            Ипотека оформлена! Сумма кредита ${fmt.format(d.loan_amount_rub)} ₽.<br/>
+            Ставка: ${d.rate_pct}% годовых · Срок: ${d.term_years} лет<br/>
+            Ежемесячный платёж: ${fmt.format(d.monthly_payment_rub)} ₽<br/>
+            <span style="font-size:11px;color:var(--good)">Номер договора: ${d.mortgage_id}</span>
+          </div>`;
+          pendingMortgage = null;
+        } else {
+          mortgageRegisterResult.innerHTML = `<div class="alert error">${d.detail || "ошибка"}</div>`;
+          mortgageOffer.style.display = "block";
+        }
+      } catch(e) {
+        mortgageRegisterResult.innerHTML = `<div class="alert error">Сервер не ответил</div>`;
+        mortgageOffer.style.display = "block";
+      }
+    });
 
     // ---- deposit tab ----
     const depositClientSel = document.getElementById("deposit-client-select");

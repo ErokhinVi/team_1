@@ -27,6 +27,17 @@ from_client_id, new_balance_rub, tx_id, ts}`.
 ### GET /corporate
 HTML-страница корпоративного банкинга. Сотрудник компании вводит ID корпоративного счёта, видит баланс и реквизиты компании, заполняет форму платежа. Для человека, не для других блоков.
 
+### POST /api/mortgage/decision
+Решение по ипотеке (прокси к cib `POST /mortgage/decision`).
+Принимает `{customer_id, property_price_rub, down_payment_rub, term_years}`.
+Возвращает `{approved, reason, loan_amount_rub, property_price_rub, down_payment_rub, term_years, rate_pct, monthly_payment_rub}`.
+
+### POST /api/mortgage/register
+Регистрация ипотеки (прокси к backend `POST /mortgages`). Ставку `rate_pct`, показанную
+клиенту в решении cib, retail передаёт как есть, чтобы зафиксированная ставка совпала с обещанной.
+Принимает `{customer_id, property_price_rub, down_payment_rub, loan_amount_rub, term_years, rate_pct}`.
+Возвращает `{mortgage_id, customer_id, property_price_rub, down_payment_rub, loan_amount_rub, term_years, rate_pct, monthly_payment_rub, status, created_at}`.
+
 ### POST /api/deposit/terms
 Условия вклада (прокси к cib `POST /deposit/terms`).
 Принимает `{customer_id, amount_rub, term_months}`.

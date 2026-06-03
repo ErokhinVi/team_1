@@ -165,6 +165,30 @@ async def loan_disburse(payload: dict) -> dict:
     return r.json()
 
 
+@app.post("/api/mortgage/decision")
+async def mortgage_decision(payload: dict) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.post(f"{CIB_URL}/mortgage/decision", json=payload)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"cib недоступен: {exc}")
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:300])
+    return r.json()
+
+
+@app.post("/api/mortgage/register")
+async def mortgage_register(payload: dict) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.post(f"{BACKEND_URL}/mortgages", json=payload)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"backend недоступен: {exc}")
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:300])
+    return r.json()
+
+
 @app.post("/api/deposit/terms")
 async def deposit_terms(payload: dict) -> dict:
     try:
