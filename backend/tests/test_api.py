@@ -467,6 +467,18 @@ def test_create_deposit_custom_rate():
     # Персональная ставка от cib имеет приоритет над таблицей по сроку
     assert r.json()["rate_pct"] == 14.7
 
+def test_create_deposit_high_rate_no_cap():
+    """cib may quote rates of 20–22%+; backend must store/return them
+    unchanged, with no upper cap and no override by the term-based default."""
+    r = client.get("/clients?segment=private&limit=1")
+    cid = r.json()["items"][0]["id"]
+    for rate in (20, 22, 22.5, 99):
+        r = client.post("/deposits", json={
+            "customer_id": cid, "amount_rub": 10000, "term_months": 12, "rate_pct": rate
+        })
+        assert r.status_code == 200, f"rejected rate_pct={rate}"
+        assert r.json()["rate_pct"] == float(rate), f"rate_pct={rate} not honoured exactly"
+
 def test_create_deposit_invalid_custom_rate():
     r = client.get("/clients?segment=private&limit=1")
     cid = r.json()["items"][0]["id"]
