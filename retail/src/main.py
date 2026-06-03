@@ -95,7 +95,9 @@ async def credit_apply(payload: dict) -> dict:
         raise HTTPException(status_code=card_r.status_code, detail=card_r.text[:300])
     card = card_r.json()
     return {"approved": True, "reason": decision.get("reason", ""),
-            "limit": credit_limit, "card": card}
+            "limit": credit_limit,
+            "rate_pct": decision.get("rate_pct"),
+            "card": card}
 
 
 @app.get("/api/credit-cards")

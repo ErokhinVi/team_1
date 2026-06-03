@@ -428,7 +428,8 @@
         });
         const d = await r.json();
         if (r.ok && d.approved) {
-          applyResult.innerHTML = `<div class="alert ok">Заявка одобрена! Лимит: ${fmt.format(d.limit)} ₽<br/>${d.reason || ""}</div>`;
+          const rateStr = d.rate_pct ? ` · Ставка: ${d.rate_pct}% годовых` : "";
+          applyResult.innerHTML = `<div class="alert ok">Заявка одобрена! Лимит: ${fmt.format(d.limit)} ₽${rateStr}<br/>${d.reason || ""}</div>`;
           loadCards(opt.value);
         } else if (r.ok) {
           applyResult.innerHTML = `<div class="alert error">Отказ: ${d.reason || "нет данных"}</div>`;
