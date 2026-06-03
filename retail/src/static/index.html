@@ -219,6 +219,7 @@
     </div>
     <div class="tab-pane" data-pane="credit">
       <div class="section-title">Подать заявку на кредитную карту</div>
+      <div id="pre-approval-msg"></div>
       <div class="form-row">
         <label>Выберите клиента</label>
         <select id="credit-client-select"></select>
@@ -263,8 +264,9 @@
           </option>`
         ).join("");
         creditClientSel.innerHTML = items.map(c =>
-          `<option value="${c.id}">${c.name}</option>`
+          `<option value="${c.id}" data-income="${c.income_rub || 0}" data-overdue="${c.has_overdue_history || false}">${c.name}</option>`
         ).join("");
+        showPreApproval();
         if (items.length) onPickClient();
       } catch(e) { console.error(e); }
     }
@@ -370,10 +372,32 @@
     });
 
     // ---- кредитная карта ----
+    const preApprovalMsg = document.getElementById("pre-approval-msg");
+
+    function showPreApproval() {
+      const opt = creditClientSel.selectedOptions[0];
+      if (!opt) return;
+      const income = +opt.dataset.income || 0;
+      const overdue = opt.dataset.overdue === "true";
+      if (overdue) {
+        preApprovalMsg.innerHTML = `<div class="alert info" style="margin-bottom:12px">У вас есть история просрочек — решение будет принято индивидуально.</div>`;
+      } else if (income > 0) {
+        const limit = Math.round(income * 12 * 0.30);
+        preApprovalMsg.innerHTML = `<div class="alert ok" style="margin-bottom:12px">✓ Вы, скорее всего, получите одобрение — предварительный лимит до ${fmt.format(limit)} ₽.</div>`;
+      } else {
+        preApprovalMsg.innerHTML = `<div class="alert info" style="margin-bottom:12px">Заполните заявку — мы рассмотрим её индивидуально.</div>`;
+      }
+    }
+
     const creditClientSel = document.getElementById("credit-client-select");
     const applyBtn = document.getElementById("credit-apply-btn");
     const applyResult = document.getElementById("credit-apply-result");
     const cardsList = document.getElementById("cards-list");
+
+    creditClientSel.addEventListener("change", () => {
+      showPreApproval();
+      loadCards(creditClientSel.selectedOptions[0]?.value);
+    });
 
     async function loadCards(clientId) {
       try {
