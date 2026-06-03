@@ -25,6 +25,14 @@ Rules: declined if no income or if customer has overdue payment history.
 If approved: limit = 30% of annual income (50% for premium-segment customers); rate_pct between 19.0 and 27.0 based on risk score (17.0–25.0 for premium customers).
 Returns 404 if customer not found.
 
+### POST /brokerage/suitability
+Brokerage suitability check. Accepts JSON `{"customer_id": "<id>"}`.
+Returns `{"suitable": bool, "tier": "standard"|"premium"|null, "allowed_instruments": [...], "reason": "..."}`.
+Rules: declined if income < 30,000 RUB/month or has overdue history.
+Standard customers (mass segment): bonds and ETFs only.
+Premium customers: full range — stocks, bonds, ETFs, structured products.
+Returns 404 if customer not found.
+
 ## Кого я зову у соседей
 
 - backend: `GET /clients/{client_id}` — to fetch customer income for the credit decision

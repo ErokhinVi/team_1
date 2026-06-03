@@ -22,10 +22,16 @@ PRODUCTS = [
     {"id": "card-debit", "kind": "card", "name": "Дебетовая карта", "segment": "mass"},
     {"id": "deposit-base", "kind": "deposit", "name": "Срочный депозит", "rate_pct": 14.0},
     {"id": "card-credit", "kind": "card", "name": "Кредитная карта", "segment": "mass"},
+    {"id": "brokerage-standard", "kind": "brokerage", "name": "Брокерский счёт", "segment": "mass"},
+    {"id": "brokerage-premium", "kind": "brokerage", "name": "Брокерский счёт Премиум", "segment": "premium"},
 ]
 
 
 class CreditDecisionRequest(BaseModel):
+    customer_id: str
+
+
+class SuitabilityRequest(BaseModel):
     customer_id: str
 
 app = FastAPI(title="cib — корпоратив и бизнес-логика", version="1.0.0")
@@ -73,6 +79,39 @@ async def credit_decision(req: CreditDecisionRequest) -> dict:
 
     return {"approved": True, "credit_limit_rub": limit, "rate_pct": rate_pct,
             "reason": f"Approved: income {income_rub} RUB/month, no overdue history; rate reflects individual risk profile"}
+
+
+@app.post("/brokerage/suitability")
+async def brokerage_suitability(req: SuitabilityRequest) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(f"{BACKEND_URL}/clients/{req.customer_id}")
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Backend unavailable")
+    customer = resp.json()
+    income_rub = customer.get("income_rub", 0)
+    segment = customer.get("segment", "mass")
+    has_overdue = customer.get("has_overdue_history", False)
+
+    if income_rub < 30_000:
+        return {"suitable": False, "tier": None,
+                "allowed_instruments": [],
+                "reason": "Minimum income of 30,000 RUB/month required to open a brokerage account"}
+
+    if has_overdue:
+        return {"suitable": False, "tier": None,
+                "allowed_instruments": [],
+                "reason": "Brokerage account unavailable: history of overdue payments on record"}
+
+    if segment == "premium":
+        return {"suitable": True, "tier": "premium",
+                "allowed_instruments": ["stocks", "bonds", "etf", "structured_products"],
+                "reason": "Premium customer: full instrument range available"}
+
+    return {"suitable": True, "tier": "standard",
+            "allowed_instruments": ["bonds", "etf"],
+            "reason": "Standard customer: lower-risk instruments available (bonds and ETFs)"}
 
 
 @app.get("/", response_class=HTMLResponse)
