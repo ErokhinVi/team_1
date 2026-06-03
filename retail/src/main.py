@@ -102,6 +102,36 @@ async def payroll_run(payload: dict) -> dict:
     return r.json()
 
 
+@app.post("/api/referral/validate")
+async def referral_validate(payload: dict) -> dict:
+    if not payload.get("referrer_id"):
+        raise HTTPException(status_code=400, detail="referrer_id required")
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.post(f"{CIB_URL}/referral/validate", json=payload)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"cib недоступен: {exc}")
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:300])
+    return r.json()
+
+
+@app.post("/api/referrals")
+async def referrals(payload: dict) -> dict:
+    if not payload.get("referrer_id"):
+        raise HTTPException(status_code=400, detail="referrer_id required")
+    if not payload.get("new_customer_name"):
+        raise HTTPException(status_code=400, detail="new_customer_name required")
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.post(f"{BACKEND_URL}/referrals", json=payload)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"backend недоступен: {exc}")
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:300])
+    return r.json()
+
+
 @app.post("/api/corporate/payments")
 async def corporate_payment(payload: dict) -> dict:
     from_account_id = payload.get("from_account_id") or payload.get("corporate_client_id")

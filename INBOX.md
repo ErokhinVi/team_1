@@ -110,3 +110,6 @@ Retail's half of payroll-as-acquisition is done. The corporate page now has the 
 
 ### [step 8] cib → backend, retail
 Referral check done. POST /referral/validate {referrer_id} → {eligible, reason}. Calls your GET /clients/{id} (must be a real customer) and GET /referrals/{id} (count vs cap of 10). Declines non-customers and anyone at the 10-invite cap; otherwise eligible. retail can wire the banner form to /api/referral/validate → /api/referrals. Declared in cib/CONTRACT.md. — cib (Roland)
+
+### [step 7] retail → backend, cib
+Referral program — retail's part is done. Front page now has a "Bring a friend — both get 20 000 ₽" banner opening a new "Друг" tab: pick the referrer, type the friend's name → /api/referral/validate (cib) → /api/referrals (backend). Success shows "🎉 <friend> is now a bank customer! You both got 20 000 ₽" with both new balances, and the referrer's on-screen balance updates live. Using your exact fields (referrer_id, new_customer_name; referrer_new_balance_rub, new_customer_balance_rub, bonus_rub). Declares get surfaced to the user. Contract updated, sending to the shared pile now. Feature complete across all three blocks. — retail (Nikita)

@@ -256,6 +256,14 @@
       <div style="font-size:22px">🏠</div>
     </div>
 
+    <div id="referral-banner" style="margin:10px 22px 0;padding:16px;border-radius:12px;background:linear-gradient(135deg,#6a2a8a 0%,#3a1a5a 100%);display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+      <div>
+        <div style="font-weight:700;font-size:15px;color:#fff" data-i18n="referral_banner_title">Приведи друга — оба получите 20 000 ₽</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.7);margin-top:2px" data-i18n="referral_banner_sub">Пригласите друга в банк и получите бонус каждый</div>
+      </div>
+      <div style="font-size:26px;margin-left:10px">🎁</div>
+    </div>
+
     <div style="margin:10px 22px 0;padding:14px 16px;background:var(--raiff);border-radius:10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;" id="credit-banner">
       <div>
         <div style="font-weight:600;font-size:14px;color:var(--text)" data-i18n="banner_title">Кредитная карта</div>
@@ -270,6 +278,7 @@
       <button class="tab" data-tab="loan">Кредит наличными</button>
       <button class="tab" data-tab="mortgage">Ипотека</button>
       <button class="tab" data-tab="deposit">Вклад</button>
+      <button class="tab" data-tab="referral">Друг</button>
     </div>
 
     <div class="tab-pane show" data-pane="transfers">
@@ -397,6 +406,23 @@
       </div>
       <div id="deposit-open-result"></div>
     </div>
+
+    <div class="tab-pane" data-pane="referral">
+      <div style="padding:16px;border-radius:12px;background:linear-gradient(135deg,#6a2a8a 0%,#3a1a5a 100%);margin-bottom:18px;">
+        <div style="font-weight:700;font-size:17px;color:#fff">🎁 Приведи друга — оба получите 20 000 ₽</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.75);margin-top:4px">Друг открывает счёт в Райф, а мы дарим по 20 000 ₽ и вам, и ему.</div>
+      </div>
+      <div class="form-row">
+        <label>Кто приглашает</label>
+        <select id="referral-client-select"></select>
+      </div>
+      <div class="form-row">
+        <label>Имя друга</label>
+        <input id="referral-friend-name" placeholder="например, Анна Смирнова" />
+      </div>
+      <button class="btn primary" id="referral-btn">Пригласить друга</button>
+      <div id="referral-result"></div>
+    </div>
   </div>
 
   <script>
@@ -416,6 +442,8 @@
         mortgage_banner_sub:   "Свой дом с выгодной ставкой",
         banner_title:       "Кредитная карта",
         banner_sub:         "Бесплатно за 1 минуту",
+        referral_banner_title: "Приведи друга — оба получите 20 000 ₽",
+        referral_banner_sub:   "Пригласите друга в банк и получите бонус каждый",
         transfer_title:     "Перевести",
         transfer_to:        "Кому",
         transfer_to_ph:     "имя или ID получателя",
@@ -464,6 +492,8 @@
         mortgage_banner_sub:   "Your own home at a great rate",
         banner_title:       "Credit Card",
         banner_sub:         "Free in 1 minute",
+        referral_banner_title: "Bring a friend — both get 20 000 ₽",
+        referral_banner_sub:   "Invite a friend to the bank and you each get a bonus",
         transfer_title:     "Send money",
         transfer_to:        "To",
         transfer_to_ph:     "name or recipient ID",
@@ -514,6 +544,8 @@
       mortgage_banner_sub:   "Ihr Zuhause zu günstigem Zinssatz",
       banner_title:       "Kreditkarte",
       banner_sub:         "Kostenlos in 1 Minute",
+      referral_banner_title: "Freund werben — beide erhalten 20 000 ₽",
+      referral_banner_sub:   "Laden Sie einen Freund ein und Sie erhalten beide einen Bonus",
       transfer_title:     "Geld senden",
       transfer_to:        "An",
       transfer_to_ph:     "Name oder Empfänger-ID",
@@ -619,6 +651,9 @@
           `<option value="${c.id}">${c.name}</option>`
         ).join("");
         mortgageClientSel.innerHTML = items.map(c =>
+          `<option value="${c.id}">${c.name}</option>`
+        ).join("");
+        referralClientSel.innerHTML = items.map(c =>
           `<option value="${c.id}">${c.name}</option>`
         ).join("");
         showPreApproval();
@@ -1149,6 +1184,56 @@
     document.getElementById("mortgage-banner").addEventListener("click", () => {
       const mortgageTab = document.querySelector('.tab[data-tab="mortgage"]');
       if (mortgageTab) mortgageTab.click();
+    });
+
+    // ---- referral tab ----
+    const referralClientSel = document.getElementById("referral-client-select");
+    const referralBtn = document.getElementById("referral-btn");
+    const referralResult = document.getElementById("referral-result");
+
+    referralBtn.addEventListener("click", async () => {
+      const referrerId = referralClientSel.value;
+      const friendName = document.getElementById("referral-friend-name").value.trim();
+      if (!referrerId) { referralResult.innerHTML = `<div class="alert error">Выберите, кто приглашает</div>`; return; }
+      if (!friendName) { referralResult.innerHTML = `<div class="alert error">Введите имя друга</div>`; return; }
+      referralResult.innerHTML = `<div class="alert info">Проверяем…</div>`;
+      try {
+        const vr = await fetch("/api/referral/validate", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({referrer_id: referrerId}),
+        });
+        const vd = await vr.json();
+        if (!vr.ok) { referralResult.innerHTML = `<div class="alert error">${vd.detail || "ошибка"}</div>`; return; }
+        if (!vd.eligible) { referralResult.innerHTML = `<div class="alert error">Приглашение отклонено: ${vd.reason || "не подходит"}</div>`; return; }
+        referralResult.innerHTML = `<div class="alert info">Оформляем приглашение…</div>`;
+        const rr = await fetch("/api/referrals", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({referrer_id: referrerId, new_customer_name: friendName}),
+        });
+        const rd = await rr.json();
+        if (!rr.ok) { referralResult.innerHTML = `<div class="alert error">${rd.detail || "ошибка"}</div>`; return; }
+        const opt = sel.selectedOptions[0];
+        if (opt && opt.value === referrerId && rd.referrer_new_balance_rub != null) {
+          opt.dataset.balance = rd.referrer_new_balance_rub;
+          updateBalanceDisplay(rd.referrer_new_balance_rub, +balanceBroker.textContent.replace(/\s/g,"") || 0);
+        }
+        referralResult.innerHTML = `<div class="alert ok">
+          <div style="font-size:16px;font-weight:600;margin-bottom:4px;">🎉 ${rd.new_customer_name} теперь клиент банка!</div>
+          Вы оба получили по ${fmt.format(rd.bonus_rub)} ₽.<br/>
+          Ваш новый баланс: ${fmt.format(rd.referrer_new_balance_rub)} ₽ · Баланс друга: ${fmt.format(rd.new_customer_balance_rub)} ₽
+        </div>`;
+        document.getElementById("referral-friend-name").value = "";
+      } catch(e) {
+        referralResult.innerHTML = `<div class="alert error">Сервер не ответил</div>`;
+      }
+    });
+
+    // баннер «Приведи друга» открывает вкладку «Друг»
+    document.getElementById("referral-banner").addEventListener("click", () => {
+      const refTab = document.querySelector('.tab[data-tab="referral"]');
+      if (refTab) refTab.click();
     });
 
     loadClients();
