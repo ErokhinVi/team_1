@@ -221,7 +221,7 @@
         </div>
         <div style="font-size:32px;margin-left:12px;">🏦</div>
       </div>
-      <button onclick="document.querySelector('[data-tab=\\'deposit\\']').click()" style="margin-top:14px;width:100%;padding:11px;background:var(--raiff);color:var(--text);border:0;border-radius:8px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;">Открыть вклад</button>
+      <button id="deposit-banner-btn" style="margin-top:14px;width:100%;padding:11px;background:var(--raiff);color:var(--text);border:0;border-radius:8px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;">Открыть вклад</button>
     </div>
 
     <a href="/corporate" style="display:block;margin:10px 22px 0;padding:14px 16px;background:#1a2a3a;border-radius:10px;text-decoration:none;display:flex;align-items:center;justify-content:space-between;">
@@ -989,6 +989,12 @@
         }
       } catch(e) { /* banner stays hidden if CIB is unreachable */ }
     })();
+
+    // кнопка на баннере открывает вкладку «Вклад»
+    document.getElementById("deposit-banner-btn").addEventListener("click", () => {
+      const depositTab = document.querySelector('.tab[data-tab="deposit"]');
+      if (depositTab) depositTab.click();
+    });
 
     loadClients();
   })();
