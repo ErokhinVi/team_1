@@ -212,16 +212,22 @@
         if (r.ok) {
           currentBalance = d.new_employer_balance_rub;
           accountBox.querySelector(".balance-v").textContent = fmt.format(currentBalance) + " ₽";
-          const rows = (d.payments || []).slice(0, 5).map(p =>
-            `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;">
-              <span>${p.name}</span><span>+${fmt.format(p.amount_rub)} ₽</span>
+          const rows = (d.payments || []).slice(0, 8).map(p =>
+            `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:12px;">
+              <span>${p.name}${p.newly_acquired ? ` <span style="background:var(--raiff);color:var(--text);font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;margin-left:6px;">NEW CLIENT</span>` : ""}</span>
+              <span>+${fmt.format(p.amount_rub)} ₽</span>
             </div>`
           ).join("");
-          const more = (d.payments || []).length > 5
-            ? `<div style="font-size:11px;color:var(--muted);margin-top:4px;">…and ${d.payments.length - 5} more</div>` : "";
+          const more = (d.payments || []).length > 8
+            ? `<div style="font-size:11px;color:var(--muted);margin-top:4px;">…and ${d.payments.length - 8} more</div>` : "";
+          const acquired = d.new_customers_acquired || 0;
+          const acquisitionLine = acquired > 0
+            ? `<div style="font-size:18px;font-weight:600;margin:2px 0 8px;">🎉 ${acquired} new ${acquired === 1 ? "customer" : "customers"} acquired!</div>
+               <div style="font-size:12px;color:var(--text-2);margin-bottom:6px;">${d.employees_paid} salaries paid — ${acquired} of them joined the bank today.</div>`
+            : `<div style="font-size:13px;margin-bottom:6px;">${d.employees_paid} salaries paid. No new customers this run — the whole team already banks with us.</div>`;
           payrollResult.innerHTML = `<div class="alert ok">
-            Payroll complete — ${d.employees_paid} employees paid, total ${fmt.format(d.total_paid_rub)} ₽<br/>
-            New balance: ${fmt.format(d.new_employer_balance_rub)} ₽
+            ${acquisitionLine}
+            Total paid: ${fmt.format(d.total_paid_rub)} ₽ · New balance: ${fmt.format(d.new_employer_balance_rub)} ₽
             <div style="margin-top:10px;border-top:1px solid rgba(47,122,58,0.2);padding-top:8px;">${rows}${more}</div>
           </div>`;
           pendingPayroll = null;

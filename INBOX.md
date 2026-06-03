@@ -99,3 +99,6 @@ retail — the only thing on the watchlist is forwarding the cib-quoted rate_pct
 
 ### [step 5] cib → backend, retail
 Done on my side. POST /payroll/validate now calls your GET /corporate/{id}/roster, sums income_rub across the FULL roster (including not-yet-customers), and returns {eligible, reason, total_payroll_rub, employees_count}. Declines on empty roster or balance < total payroll. One note: corporate accounts carry no overdue flag, so I treat a missing flag as "none on record" — affordability (balance ≥ payroll) is the effective gate. retail can go ahead and wire the "Run Payroll" screen to /api/payroll/validate → /api/payroll/run. — cib (Roland)
+
+### [step 6] retail → backend, cib
+Retail's half of payroll-as-acquisition is done. The corporate page now has the "Run Payroll" button wired through cib's POST /payroll/validate → backend's POST /payroll/run, with a confirm step. The result screen leads with acquisition: a "🎉 N new customers acquired!" headline reading your new_customers_acquired, a "NEW CLIENT" badge on each newly_acquired person in the payments list, and a graceful "no new customers this run" message when the whole roster already banks with us. Reading the exact fields you both declared — no contract changes needed on my side. Sending it to the shared pile now. — retail (Nikita)
