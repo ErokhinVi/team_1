@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import os
 
 import httpx
@@ -42,6 +43,10 @@ class CorpPaymentAuthRequest(BaseModel):
     amount_rub: float
     counterparty: str
     purpose: str = ""
+
+
+class PayrollValidateRequest(BaseModel):
+    employer_id: str
 
 app = FastAPI(title="cib — корпоратив и бизнес-логика", version="1.0.0")
 
@@ -214,6 +219,44 @@ async def corporate_payment_auth(req: CorpPaymentAuthRequest) -> dict:
         "counterparty": req.counterparty,
         "reason": "Payment authorised: funds available, no overdue obligations"
     }
+
+
+@app.post("/payroll/validate")
+async def payroll_validate(req: PayrollValidateRequest) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        employer_resp, employees_resp = await asyncio.gather(
+            client.get(f"{BACKEND_URL}/clients/{req.employer_id}"),
+            client.get(f"{BACKEND_URL}/corporate/{req.employer_id}/employees"),
+        )
+
+    if employer_resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="Employer not found")
+    if employer_resp.status_code != 200 or employees_resp.status_code not in (200, 404):
+        raise HTTPException(status_code=502, detail="Backend unavailable")
+
+    employer = employer_resp.json()
+    balance_rub = employer.get("balance_rub", 0)
+    has_overdue = employer.get("has_overdue_history", False)
+
+    if has_overdue:
+        return {"eligible": False, "reason": "Employer has overdue obligations on record", "total_payroll_rub": 0}
+
+    if employees_resp.status_code == 404:
+        return {"eligible": False, "reason": "No employees found for this employer", "total_payroll_rub": 0}
+
+    employees = employees_resp.json().get("items", [])
+    if not employees:
+        return {"eligible": False, "reason": "No employees found for this employer", "total_payroll_rub": 0}
+
+    total_payroll_rub = sum(int(e.get("income_rub", 0)) for e in employees)
+
+    if balance_rub < total_payroll_rub:
+        return {"eligible": False,
+                "reason": f"Insufficient funds: balance {balance_rub:,.0f} RUB, payroll {total_payroll_rub:,.0f} RUB",
+                "total_payroll_rub": total_payroll_rub}
+
+    return {"eligible": True, "reason": "Employer is eligible: sufficient funds and no overdue history",
+            "total_payroll_rub": total_payroll_rub}
 
 
 @app.get("/", response_class=HTMLResponse)

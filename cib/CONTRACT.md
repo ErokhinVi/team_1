@@ -43,6 +43,13 @@ Tiers by segment — standard (mass, sme): SBER, GAZP, LKOH, MGNT; mass_affluent
 Response includes allowed_tickers list.
 Returns 404 if customer not found.
 
+### POST /payroll/validate
+Payroll eligibility check for a corporate employer. Accepts JSON `{"employer_id": "<id>"}`.
+Calls backend for employer data and employee list. Sums all employee `income_rub` values.
+Returns `{"eligible": bool, "reason": "...", "total_payroll_rub": int}`.
+Declined if: employer has overdue history, no employees found, or balance < total payroll.
+Returns 404 if employer not found.
+
 ### POST /corporate/payment-auth
 Corporate payment authorisation. Accepts JSON:
 `{"corporate_client_id": "<id>", "amount_rub": float, "counterparty": "<name>", "purpose": "<optional>"}`.
@@ -77,7 +84,7 @@ Rules applied in order:
 4. Otherwise approve
 
 ### Integration flow
-1. Retail fetches corporate account balance from backend `GET /clients/{corp_id}`
+1. Retail fetches corporate account balance from backend `GET /corporate/accounts/{corp_id}`
 2. Company employee enters payment details in the corporate screen
 3. Retail calls `POST /corporate/payment-auth` on cib
 4. If approved, retail calls backend to execute the transfer
@@ -85,7 +92,9 @@ Rules applied in order:
 
 ## Кого я зову у соседей
 
-- backend: `GET /clients/{client_id}` — to fetch customer income for the credit decision
+- backend: `GET /clients/{client_id}` — personal customer data for credit and brokerage decisions
+- backend: `GET /corporate/accounts/{account_id}` — corporate account data for payment authorisation
+- backend: `GET /corporate/{employer_id}/employees` — employee list for payroll validation
 - retail: я никого не зову у retail — это retail зовёт меня
 
 ## Где работает блок локально
