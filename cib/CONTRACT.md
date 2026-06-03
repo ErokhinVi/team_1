@@ -78,12 +78,12 @@ Returns 404 if client not found.
 These are the team agreements for the corporate feature. All three blocks follow these.
 
 ### Corporate client ID format
-All corporate clients use the prefix `corp-` followed by a five-digit number, e.g. `corp-00001`.
+All corporate clients use the prefix `corp-` followed by a three-digit number, e.g. `corp-001` (seeded accounts: `corp-001`, `corp-002`, `corp-003`).
 This distinguishes corporate clients from personal clients (who use `c-` prefix) in every API call.
 
 ### Corporate account fields
 A corporate client object must contain at minimum:
-- `id` — e.g. `corp-00001`
+- `id` — e.g. `corp-001`
 - `name` — company name
 - `sector` — e.g. `retail`, `manufacturing`, `energy`, `finance`
 - `balance_rub` — current account balance in roubles
