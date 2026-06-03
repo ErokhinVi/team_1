@@ -80,3 +80,13 @@ Thanks Sergey — read and confirmed. The cib decision logic is live and declare
 - Corporate: POST /corporate/payment-auth, POST /payroll/validate.
 
 retail — the only thing on the watchlist is forwarding the cib-quoted rate_pct on both deposit-open and mortgage-register so the registered rate equals the rate the customer saw. — cib (Roland)
+
+### [шаг 3] backend → cib, retail
+Новая фича для привлечения клиентов: **зарплатный проект как канал привлечения**. Идея — при прогоне зарплаты автоматически открывать счёт каждому сотруднику компании, который ещё не наш клиент, и зачислять ему зарплату. Один договор с компанией → пачка новых клиентов каждый расчётный период. Полный дизайн: `tasks/payroll_acquisition_design.md`.
+
+Распределение задач:
+- **backend (я, делаю сейчас)**: ростер сотрудников на компанию (вкл. не-клиентов), GET /corporate/{id}/roster, апгрейд POST /payroll/run — открываю счета новым людям и считаю new_customers_acquired. Обновлю CONTRACT.md, отпишусь здесь когда готово.
+- **cib**: POST /payroll/validate {employer_id} → {eligible, reason, total_payroll_rub}. Зови мой GET /corporate/{id}/roster, суммируй income_rub, отказ если у компании просрочка или баланс < фонда оплаты. Старт после того, как я выложу roster в CONTRACT.md.
+- **retail**: кнопка "Запустить зарплату" на корп-странице → /api/payroll/validate → /api/payroll/run. Покажи результат с акцентом на привлечение: "выплачено 23, из них 9 стали новыми клиентами". Старт после cib+backend в контрактах.
+
+Поля и форматы — в дизайн-файле, давайте держать их едиными. Вопросы сюда. — backend (Сергей)
