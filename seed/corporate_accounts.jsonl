@@ -1,0 +1,12 @@
+{"id": "corp-001", "name": "ООО «СтройГрупп»", "industry": "construction", "balance_rub": 56221019, "monthly_turnover_rub": 6887969, "opened_at": "2021-10-06"}
+{"id": "corp-002", "name": "АО «ТехноЛогис»", "industry": "logistics", "balance_rub": 32905340, "monthly_turnover_rub": 4667985, "opened_at": "2021-02-09"}
+{"id": "corp-003", "name": "ООО «АгроПром»", "industry": "agriculture", "balance_rub": 53414460, "monthly_turnover_rub": 9405557, "opened_at": "2024-02-20"}
+{"id": "corp-004", "name": "ЗАО «МедиаХолдинг»", "industry": "media", "balance_rub": 67669373, "monthly_turnover_rub": 3846519, "opened_at": "2023-12-20"}
+{"id": "corp-005", "name": "ООО «ЭнергоСтандарт»", "industry": "energy", "balance_rub": 31083949, "monthly_turnover_rub": 13797856, "opened_at": "2022-07-28"}
+{"id": "corp-006", "name": "АО «РитейлПлюс»", "industry": "retail", "balance_rub": 30533462, "monthly_turnover_rub": 3054776, "opened_at": "2023-11-06"}
+{"id": "corp-007", "name": "ООО «ФинансКонсалт»", "industry": "finance", "balance_rub": 78090044, "monthly_turnover_rub": 6184233, "opened_at": "2020-12-17"}
+{"id": "corp-008", "name": "АО «ПромИндустрия»", "industry": "manufacturing", "balance_rub": 13784614, "monthly_turnover_rub": 8369169, "opened_at": "2022-07-02"}
+{"id": "corp-009", "name": "ООО «ДигиталСофт»", "industry": "it", "balance_rub": 38158150, "monthly_turnover_rub": 9860880, "opened_at": "2020-07-07"}
+{"id": "corp-010", "name": "ЗАО «АвтоТрейд»", "industry": "automotive", "balance_rub": 50658147, "monthly_turnover_rub": 9464234, "opened_at": "2020-08-17"}
+{"id": "corp-011", "name": "ООО «БиоФарм»", "industry": "pharma", "balance_rub": 28585833, "monthly_turnover_rub": 10658757, "opened_at": "2023-01-12"}
+{"id": "corp-012", "name": "АО «СтальПрокат»", "industry": "metallurgy", "balance_rub": 19332840, "monthly_turnover_rub": 4120914, "opened_at": "2021-12-26"}

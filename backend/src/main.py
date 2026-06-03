@@ -43,6 +43,9 @@ _credit_cards: list[dict[str, Any]] = []
 _credit_cards_by_id: dict[str, dict[str, Any]] = {}
 _brokerage_accounts: dict[str, dict[str, Any]] = {}
 _brokerage_orders: list[dict[str, Any]] = []
+_corporate_accounts: list[dict[str, Any]] = []
+_corporate_accounts_by_id: dict[str, dict[str, Any]] = {}
+_corporate_payments: list[dict[str, Any]] = []
 
 MOCK_PRICES: dict[str, float] = {
     "SBER": 312.5,
@@ -92,6 +95,12 @@ def _save_brokerage() -> None:
         _save_jsonl(SEED_DIR / "brokerage_orders.jsonl", _brokerage_orders)
 
 
+def _save_corporate() -> None:
+    if SEED_DIR:
+        _save_jsonl(SEED_DIR / "corporate_accounts.jsonl", _corporate_accounts)
+        _save_jsonl(SEED_DIR / "corporate_payments.jsonl", _corporate_payments)
+
+
 def _load_seed() -> None:
     if not SEED_DIR:
         return
@@ -105,6 +114,10 @@ def _load_seed() -> None:
     for acc in _load_jsonl(SEED_DIR / "brokerage_accounts.jsonl"):
         _brokerage_accounts[acc["customer_id"]] = acc
     _brokerage_orders.extend(_load_jsonl(SEED_DIR / "brokerage_orders.jsonl"))
+    corps = _load_jsonl(SEED_DIR / "corporate_accounts.jsonl")
+    _corporate_accounts.extend(corps)
+    _corporate_accounts_by_id.update({c["id"]: c for c in corps})
+    _corporate_payments.extend(_load_jsonl(SEED_DIR / "corporate_payments.jsonl"))
 
 
 _load_seed()
@@ -339,4 +352,68 @@ async def create_brokerage_order(payload: dict) -> dict:
         "direction": direction,
         "total_rub": total_rub,
         "new_account_balance_rub": account["balance_rub"],
+    }
+
+
+@app.get("/corporate/accounts")
+async def list_corporate_accounts(
+    industry: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict:
+    out = _corporate_accounts
+    if industry:
+        out = [c for c in out if c.get("industry") == industry]
+    return {"total": len(out), "items": out[:limit]}
+
+
+@app.get("/corporate/accounts/{account_id}")
+async def get_corporate_account(account_id: str) -> dict:
+    corp = _corporate_accounts_by_id.get(account_id)
+    if not corp:
+        raise HTTPException(status_code=404, detail=f"корпоративный счёт {account_id} не найден")
+    return corp
+
+
+@app.post("/corporate/payments")
+async def corporate_payment(payload: dict) -> dict:
+    from_id = payload.get("from_account_id")
+    to_id = payload.get("to_account_id")
+    amount = int(payload.get("amount_rub") or 0)
+    purpose = (payload.get("purpose") or "Перевод").strip()
+    if not from_id or from_id not in _corporate_accounts_by_id:
+        raise HTTPException(status_code=404, detail="счёт отправителя не найден")
+    if not to_id or to_id not in _corporate_accounts_by_id:
+        raise HTTPException(status_code=404, detail="счёт получателя не найден")
+    if from_id == to_id:
+        raise HTTPException(status_code=400, detail="отправитель и получатель совпадают")
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="сумма должна быть положительной")
+    sender = _corporate_accounts_by_id[from_id]
+    receiver = _corporate_accounts_by_id[to_id]
+    if sender["balance_rub"] < amount:
+        raise HTTPException(status_code=400, detail=f"недостаточно средств: на счёте {sender['balance_rub']} ₽")
+    sender["balance_rub"] -= amount
+    receiver["balance_rub"] += amount
+    payment_id = f"cpay-{len(_corporate_payments) + 1:06d}"
+    now_iso = datetime.now().replace(microsecond=0).isoformat()
+    payment = {
+        "payment_id": payment_id,
+        "from_account_id": from_id,
+        "from_name": sender["name"],
+        "to_account_id": to_id,
+        "to_name": receiver["name"],
+        "amount_rub": amount,
+        "purpose": purpose,
+        "ts": now_iso,
+    }
+    _corporate_payments.append(payment)
+    _save_corporate()
+    return {
+        "payment_id": payment_id,
+        "status": "executed",
+        "from_name": sender["name"],
+        "to_name": receiver["name"],
+        "amount_rub": amount,
+        "new_balance_rub": sender["balance_rub"],
+        "ts": now_iso,
     }
