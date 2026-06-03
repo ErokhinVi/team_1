@@ -577,7 +577,13 @@ async def create_deposit(payload: dict) -> dict:
     client = _clients_by_id[customer_id]
     if client["balance_rub"] < amount_rub:
         raise HTTPException(status_code=400, detail=f"недостаточно средств: на счёте {client['balance_rub']} ₽")
-    rate_pct = _deposit_rate(term_months)
+    # Персональная ставка от cib имеет приоритет; иначе — наша таблица по сроку.
+    if payload.get("rate_pct") is not None:
+        rate_pct = float(payload["rate_pct"])
+        if rate_pct <= 0:
+            raise HTTPException(status_code=400, detail="ставка должна быть положительной")
+    else:
+        rate_pct = _deposit_rate(term_months)
     from datetime import timedelta
     maturity_date = (datetime.now() + timedelta(days=30 * term_months)).date().isoformat()
     deposit_id = f"dep-{uuid.uuid4().hex[:8]}"

@@ -438,6 +438,24 @@ def test_create_deposit_not_found():
     })
     assert r.status_code == 404
 
+def test_create_deposit_custom_rate():
+    r = client.get("/clients?segment=private&limit=1")
+    cid = r.json()["items"][0]["id"]
+    r = client.post("/deposits", json={
+        "customer_id": cid, "amount_rub": 10000, "term_months": 12, "rate_pct": 14.7
+    })
+    assert r.status_code == 200
+    # Персональная ставка от cib имеет приоритет над таблицей по сроку
+    assert r.json()["rate_pct"] == 14.7
+
+def test_create_deposit_invalid_custom_rate():
+    r = client.get("/clients?segment=private&limit=1")
+    cid = r.json()["items"][0]["id"]
+    r = client.post("/deposits", json={
+        "customer_id": cid, "amount_rub": 10000, "term_months": 12, "rate_pct": -5
+    })
+    assert r.status_code == 400
+
 def test_deposit_rates_by_term():
     r = client.get("/clients?segment=private&limit=1")
     cid = r.json()["items"][0]["id"]
