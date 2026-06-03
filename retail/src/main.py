@@ -230,10 +230,11 @@ async def brokerage_page() -> str:
     return f.read_text(encoding="utf-8") if f.exists() else "<h1>Brokerage</h1>"
 
 
-@app.get("/bonds", response_class=HTMLResponse)
-async def bonds_page() -> str:
-    f = STATIC_DIR / "bonds.html"
-    return f.read_text(encoding="utf-8") if f.exists() else "<h1>Bonds</h1>"
+@app.get("/bonds")
+async def bonds_page():
+    # Облигации теперь живут на странице «Инвестиции» вместе с акциями.
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/brokerage")
 
 
 @app.get("/api/bonds/catalogue")
