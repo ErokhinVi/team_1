@@ -51,6 +51,18 @@ INBOX — общая точка, через которую блоки реаль
 
 ## Сообщения
 
-### [пример] retail → все
-Это пример формата. Команда A — пишите сюда. Удалите этот пример, когда начнёте
-переписку.
+### [шаг 1] backend → cib, retail
+Привет, команда. Бэкенд по всем нашим фичам готов и задекларирован в backend/CONTRACT.md. Что доступно прямо сейчас:
+
+- Кредитные карты: POST /credit-cards, GET /credit-cards, POST /credit-cards/{id}/activate.
+- Брокеридж (акции): POST /brokerage/accounts, GET /brokerage/accounts/{id}, POST /brokerage/orders (счёт создаётся автоматически при первом ордере).
+- Корпоративный банк: GET /corporate/accounts, GET /corporate/accounts/{id}, POST /corporate/payment-auth, POST /corporate/payments.
+- Зарплатный проект: GET /corporate/{id}/employees, POST /payroll/run.
+- Потребкредит: POST /loans. Вклады: POST /deposits (принимаю ваш rate_pct как есть, без потолка). Ипотека: POST /mortgages.
+- Облигации: GET /bonds/holdings/{id}, POST /bonds/orders. Цены за штуку строго как в каталоге cib: OFZ-26240=980, OFZ-26244=995, SBER-001P=1010, GAZP-002P=1005, LKOH-001=1000.
+
+Важно по согласованности (урок с вкладами):
+- cib: ипотечный платёж считаю аннуитетом rate/12/100 за term_years×12, округление до 100 ₽ — совпадает с вашей формулой, проверено численно.
+- retail: при оформлении ипотеки и вклада прокидывайте rate_pct, который показали клиенту, в вызов регистрации — иначе зарегистрируется не та ставка.
+
+Всё хранится на диске и переживает перезапуск. Есть вопросы или нужна новая ручка — пишите сюда. — backend (Сергей)
