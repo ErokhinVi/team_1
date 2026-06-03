@@ -184,6 +184,7 @@
 
     <div class="tabs">
       <button class="tab active" data-tab="transfers">Переводы</button>
+      <button class="tab" data-tab="credit">Кредитная карта</button>
     </div>
 
     <div class="tab-pane show" data-pane="transfers">
@@ -203,6 +204,14 @@
 
       <div class="section-title" style="margin-top:24px">Последние операции</div>
       <div id="tx-list" class="tx-list"></div>
+    </div>
+    <div class="tab-pane" data-pane="credit">
+      <div class="section-title">Подать заявку на кредитную карту</div>
+      <button class="btn primary" id="credit-apply-btn" type="button">Подать заявку</button>
+      <div id="credit-apply-result"></div>
+
+      <div class="section-title" style="margin-top:24px">Мои карты</div>
+      <div id="cards-list"></div>
     </div>
   </div>
 
@@ -339,6 +348,86 @@
         transferResult.innerHTML =
           `<div class="alert error">сервер не ответил</div>`;
       }
+    });
+
+    // ---- кредитная карта ----
+    const applyBtn = document.getElementById("credit-apply-btn");
+    const applyResult = document.getElementById("credit-apply-result");
+    const cardsList = document.getElementById("cards-list");
+
+    async function loadCards(clientId) {
+      try {
+        const r = await fetch(`/api/credit-cards?customer_id=${clientId}`);
+        const d = await r.json();
+        const items = d.items || d.cards || [];
+        if (!items.length) {
+          cardsList.innerHTML = `<div class="empty">Карт пока нет</div>`;
+          return;
+        }
+        cardsList.innerHTML = items.map(c => {
+          const statusLabel = c.status === "active" ? "Активна" : "Не активирована";
+          const statusColor = c.status === "active" ? "var(--good)" : "var(--warn)";
+          const activateBtn = c.status !== "active"
+            ? `<button class="btn" style="margin-top:8px" data-card-id="${c.card_id}" onclick="activateCard('${c.card_id}')">Активировать карту</button>`
+            : "";
+          return `<div style="padding:14px;border:1px solid var(--rule);border-radius:8px;margin-bottom:12px;">
+            <div style="font-size:12px;color:var(--muted)">Номер карты</div>
+            <div style="font-weight:500;letter-spacing:0.08em">${c.card_number || c.card_id}</div>
+            <div style="margin-top:6px;font-size:12px;color:${statusColor}">${statusLabel}</div>
+            <div style="font-size:12px;color:var(--text-2);margin-top:4px">Лимит: ${fmt.format(c.limit || 0)} ₽</div>
+            ${activateBtn}
+          </div>`;
+        }).join("");
+      } catch(e) {
+        cardsList.innerHTML = `<div class="empty">Не удалось загрузить карты</div>`;
+      }
+    }
+
+    window.activateCard = async function(cardId) {
+      const opt = sel.selectedOptions[0];
+      try {
+        const r = await fetch(`/api/credit-cards/${cardId}/activate`, {method:"POST"});
+        const d = await r.json();
+        if (r.ok) {
+          if (opt) loadCards(opt.value);
+        } else {
+          alert(d.detail || "ошибка активации");
+        }
+      } catch(e) { alert("сервер не ответил"); }
+    };
+
+    applyBtn.addEventListener("click", async () => {
+      const opt = sel.selectedOptions[0];
+      if (!opt) { applyResult.innerHTML = `<div class="alert error">сначала выбери профиль</div>`; return; }
+      applyResult.innerHTML = `<div class="alert info">Отправляем заявку…</div>`;
+      try {
+        const r = await fetch("/api/credit-apply", {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({customer_id: opt.value}),
+        });
+        const d = await r.json();
+        if (r.ok && d.approved) {
+          applyResult.innerHTML = `<div class="alert ok">Заявка одобрена! Лимит: ${fmt.format(d.limit)} ₽<br/>${d.reason || ""}</div>`;
+          loadCards(opt.value);
+        } else if (r.ok) {
+          applyResult.innerHTML = `<div class="alert error">Отказ: ${d.reason || "нет данных"}</div>`;
+        } else {
+          applyResult.innerHTML = `<div class="alert error">${d.detail || "ошибка"}</div>`;
+        }
+      } catch(e) {
+        applyResult.innerHTML = `<div class="alert error">сервер не ответил</div>`;
+      }
+    });
+
+    // reload cards when switching to credit tab
+    document.querySelectorAll(".tab").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (btn.dataset.tab === "credit") {
+          const opt = sel.selectedOptions[0];
+          if (opt) loadCards(opt.value);
+        }
+      });
     });
 
     loadClients();
