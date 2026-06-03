@@ -22,7 +22,7 @@ Credit card approval decision. Accepts JSON `{"customer_id": "<id>"}`.
 Calls backend for customer data and returns:
 `{"approved": bool, "credit_limit_rub": int, "rate_pct": float|null, "reason": "..."}`.
 Rules: declined if no income or if customer has overdue payment history.
-If approved: limit = 30% of annual income (50% for premium-segment customers); rate_pct between 19.0 and 27.0 based on risk score (17.0–25.0 for premium customers).
+If approved: limit and rate by segment — mass/sme: 30% limit, 19–27% rate; mass_affluent: 40% limit, 18–26%; premium/private: 50% limit, 17–25%.
 Returns 404 if customer not found.
 
 ### GET /products/brokerage
@@ -39,8 +39,8 @@ Returns 404 if customer not found.
 Brokerage suitability check. Accepts JSON `{"customer_id": "<id>"}`.
 Returns `{"suitable": bool, "tier": "standard"|"premium"|null, "allowed_instruments": [...], "reason": "..."}`.
 Rules: declined if income < 30,000 RUB/month or has overdue history.
-Standard customers (mass segment): defensive stocks (SBER, GAZP, LKOH, MGNT), bonds and ETFs. Response includes allowed_tickers list.
-Premium customers: full range — stocks, bonds, ETFs, structured products.
+Tiers by segment — standard (mass, sme): SBER, GAZP, LKOH, MGNT; mass_affluent: all 5 tickers; premium/private: full range + structured products.
+Response includes allowed_tickers list.
 Returns 404 if customer not found.
 
 ## Кого я зову у соседей

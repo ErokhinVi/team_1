@@ -70,11 +70,13 @@ async def credit_decision(req: CreditDecisionRequest) -> dict:
                 "reason": "Declined: history of overdue payments on record"}
 
     segment = customer.get("segment", "mass")
-    limit_multiplier = 0.50 if segment == "premium" else 0.30
+    if segment in ("premium", "private"):
+        limit_multiplier, rate_base = 0.50, 17.0
+    elif segment == "mass_affluent":
+        limit_multiplier, rate_base = 0.40, 18.0
+    else:
+        limit_multiplier, rate_base = 0.30, 19.0
     limit = int(income_rub * 12 * limit_multiplier)
-
-    # Rate: 19% base, up to 27% for high-risk customers; premium gets a 2% discount
-    rate_base = 17.0 if segment == "premium" else 19.0
     rate_pct = round(rate_base + risk_score * 8.0, 1)
 
     return {"approved": True, "credit_limit_rub": limit, "rate_pct": rate_pct,
@@ -150,10 +152,17 @@ async def brokerage_suitability(req: SuitabilityRequest) -> dict:
                 "allowed_instruments": [],
                 "reason": "Brokerage account unavailable: history of overdue payments on record"}
 
-    if segment == "premium":
+    if segment in ("premium", "private"):
         return {"suitable": True, "tier": "premium",
                 "allowed_instruments": ["stocks", "bonds", "etf", "structured_products"],
-                "reason": "Premium customer: full instrument range available"}
+                "allowed_tickers": ["SBER", "GAZP", "LKOH", "YNDX", "MGNT"],
+                "reason": f"{segment.capitalize()} customer: full instrument range available"}
+
+    if segment == "mass_affluent":
+        return {"suitable": True, "tier": "mass_affluent",
+                "allowed_instruments": ["stocks", "bonds", "etf"],
+                "allowed_tickers": ["SBER", "GAZP", "LKOH", "YNDX", "MGNT"],
+                "reason": "Mass affluent customer: full stock range available"}
 
     return {"suitable": True, "tier": "standard",
             "allowed_instruments": ["stocks", "bonds", "etf"],
