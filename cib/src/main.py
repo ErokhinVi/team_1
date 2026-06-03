@@ -172,19 +172,72 @@ async def brokerage_suitability(req: SuitabilityRequest) -> dict:
 
 @app.get("/", response_class=HTMLResponse)
 async def index() -> str:
-    rows = "".join(
-        f"<tr><td>{p['id']}</td><td>{p['kind']}</td><td>{p['name']}</td></tr>"
-        for p in PRODUCTS
+    kind_labels = {"card": "💳 Card", "deposit": "🏦 Deposit", "brokerage": "📈 Brokerage"}
+    product_cards = ""
+    for p in PRODUCTS:
+        kind = kind_labels.get(p["kind"], p["kind"])
+        extra = f'<p class="rate">Rate: {p["rate_pct"]}%</p>' if "rate_pct" in p else ""
+        segment = f'<span class="badge">{p.get("segment","all")}</span>' if "segment" in p else ""
+        product_cards += f"""
+        <div class="card">
+            <div class="card-top">{kind}{segment}</div>
+            <div class="card-name">{p["name"]}</div>
+            {extra}
+            <div class="card-id">{p["id"]}</div>
+        </div>"""
+
+    stock_rows = "".join(
+        f'<tr><td><strong>{s["ticker"]}</strong></td><td>{s["company"]}</td>'
+        f'<td class="price">{s["price_rub"]:,.2f} ₽</td></tr>'
+        for s in STOCKS
     )
-    return (
-        "<!doctype html><html lang='ru'><head><meta charset='utf-8'>"
-        "<title>cib · Райффайзен</title><style>"
-        "body{font-family:system-ui;background:#0c0d10;color:#e8e9ec;padding:32px}"
-        "h1{font-weight:500}table{border-collapse:collapse;margin-top:16px}"
-        "td,th{border:1px solid #23262f;padding:8px 14px;text-align:left}"
-        "</style></head><body>"
-        "<h1>cib — корпоратив и бизнес-логика</h1>"
-        f"<p>Команда: {TEAM_NAME}. Каталог продуктов:</p>"
-        f"<table><tr><th>id</th><th>вид</th><th>название</th></tr>{rows}</table>"
-        "</body></html>"
-    )
+
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CIB · Raiffeisen</title><style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:system-ui,-apple-system,sans-serif;background:#0c0d10;color:#e8e9ec;padding:40px 32px;max-width:960px;margin:0 auto}}
+h1{{font-size:1.6rem;font-weight:600;margin-bottom:4px}}
+.subtitle{{color:#888;font-size:.95rem;margin-bottom:40px}}
+h2{{font-size:1.1rem;font-weight:500;margin-bottom:16px;color:#aaa;text-transform:uppercase;letter-spacing:.05em}}
+.section{{margin-bottom:48px}}
+.grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}}
+.card{{background:#16181f;border:1px solid #23262f;border-radius:12px;padding:20px}}
+.card-top{{font-size:.8rem;color:#888;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}}
+.card-name{{font-size:1rem;font-weight:500;margin-bottom:8px}}
+.rate{{font-size:.85rem;color:#4ade80;margin-bottom:8px}}
+.card-id{{font-size:.75rem;color:#555;font-family:monospace}}
+.badge{{background:#1e2433;color:#7aa2f7;border-radius:4px;padding:2px 6px;font-size:.7rem}}
+table{{border-collapse:collapse;width:100%}}
+td,th{{border:1px solid #23262f;padding:10px 14px;text-align:left;font-size:.9rem}}
+th{{background:#16181f;color:#888;font-weight:500}}
+.price{{font-family:monospace;color:#4ade80}}
+.api-list{{list-style:none;display:flex;flex-direction:column;gap:8px}}
+.api-list li{{background:#16181f;border:1px solid #23262f;border-radius:8px;padding:12px 16px;font-size:.88rem;font-family:monospace}}
+.method{{display:inline-block;padding:2px 7px;border-radius:4px;font-size:.75rem;margin-right:8px;font-weight:600}}
+.get{{background:#1a3a2a;color:#4ade80}}.post{{background:#2a1a3a;color:#c084fc}}
+</style></head><body>
+<h1>CIB — Business Logic & Products</h1>
+<p class="subtitle">Team: {TEAM_NAME} &nbsp;·&nbsp; {len(PRODUCTS)} products &nbsp;·&nbsp; Decision engine for credit &amp; brokerage</p>
+
+<div class="section">
+<h2>Product Catalogue</h2>
+<div class="grid">{product_cards}</div>
+</div>
+
+<div class="section">
+<h2>Brokerage — Available Stocks</h2>
+<table><tr><th>Ticker</th><th>Company</th><th>Price</th></tr>{stock_rows}</table>
+</div>
+
+<div class="section">
+<h2>API Endpoints</h2>
+<ul class="api-list">
+<li><span class="method get">GET</span>/products — full product catalogue</li>
+<li><span class="method get">GET</span>/products/brokerage — tradeable stocks</li>
+<li><span class="method post">POST</span>/credit-decision — credit card approval (income + risk + segment)</li>
+<li><span class="method post">POST</span>/brokerage/suitability — investor suitability check</li>
+<li><span class="method get">GET</span>/brokerage/recommendation/{{customer_id}} — personalised portfolio</li>
+</ul>
+</div>
+</body></html>"""
