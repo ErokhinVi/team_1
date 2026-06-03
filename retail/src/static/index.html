@@ -53,6 +53,14 @@
       font-size: 12px; color: rgba(255,255,255,0.6);
       margin-top: 4px;
     }
+    .lang-btn {
+      float: right; margin-top: -28px;
+      background: rgba(255,255,255,0.15); border: 0;
+      color: var(--bg); font-family: inherit; font-size: 12px;
+      font-weight: 500; padding: 4px 10px; border-radius: 20px;
+      cursor: pointer; letter-spacing: 0.05em;
+    }
+    .lang-btn:hover { background: rgba(255,255,255,0.25); }
 
     .balance {
       padding: 26px 22px 22px;
@@ -168,66 +176,68 @@
 <body>
   <div class="phone">
     <div class="topbar">
-      <div><span class="logo"></span><span class="name">Райф</span></div>
+      <div><span class="logo"></span><span class="name">Райф</span>
+        <button class="lang-btn" id="lang-btn">EN</button>
+      </div>
       <div class="who" id="topbar-who"></div>
     </div>
 
     <div class="balance">
-      <div class="l">остаток на счёте</div>
+      <div class="l" data-i18n="balance_label">остаток на счёте</div>
       <div class="v"><span id="balance-v">—</span><span class="cur">₽</span></div>
     </div>
 
     <div class="client-picker">
-      <label>Профиль</label>
+      <label data-i18n="profile_label">Профиль</label>
       <select id="client-select"></select>
     </div>
 
     <div style="margin:16px 22px 0;padding:10px 16px;background:var(--text);border-radius:10px;text-align:center;">
-      <div style="font-weight:700;font-size:15px;color:var(--raiff);letter-spacing:0.01em">⭐ Самая крутая кредитная карта! ⭐</div>
+      <div style="font-weight:700;font-size:15px;color:var(--raiff);letter-spacing:0.01em" data-i18n="banner_top">⭐ Самая крутая кредитная карта! ⭐</div>
     </div>
 
     <div style="margin:10px 22px 0;padding:14px 16px;background:var(--raiff);border-radius:10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;" id="credit-banner">
       <div>
-        <div style="font-weight:600;font-size:14px;color:var(--text)">Кредитная карта</div>
-        <div style="font-size:12px;color:var(--text);opacity:0.7;margin-top:2px">Бесплатно за 1 минуту</div>
+        <div style="font-weight:600;font-size:14px;color:var(--text)" data-i18n="banner_title">Кредитная карта</div>
+        <div style="font-size:12px;color:var(--text);opacity:0.7;margin-top:2px" data-i18n="banner_sub">Бесплатно за 1 минуту</div>
       </div>
       <div style="font-size:22px">💳</div>
     </div>
 
     <div class="tabs">
-      <button class="tab active" data-tab="transfers">Переводы</button>
-      <button class="tab" data-tab="credit">Кредитная карта</button>
+      <button class="tab active" data-tab="transfers" data-i18n="tab_transfers">Переводы</button>
+      <button class="tab" data-tab="credit" data-i18n="tab_credit">Кредитная карта</button>
     </div>
 
     <div class="tab-pane show" data-pane="transfers">
-      <div class="section-title">Перевести</div>
+      <div class="section-title" data-i18n="transfer_title">Перевести</div>
       <form id="transfer-form" autocomplete="off">
         <div class="form-row">
-          <label>Кому</label>
-          <input name="to" placeholder="имя или ID получателя" />
+          <label data-i18n="transfer_to">Кому</label>
+          <input name="to" data-i18n-placeholder="transfer_to_ph" placeholder="имя или ID получателя" />
         </div>
         <div class="form-row">
-          <label>Сумма, ₽</label>
+          <label data-i18n="transfer_amount">Сумма, ₽</label>
           <input name="amount" type="number" min="1" placeholder="0" />
         </div>
-        <button class="btn primary" type="submit">Перевести</button>
+        <button class="btn primary" type="submit" data-i18n="transfer_btn">Перевести</button>
       </form>
       <div id="transfer-result"></div>
 
-      <div class="section-title" style="margin-top:24px">Последние операции</div>
+      <div class="section-title" style="margin-top:24px" data-i18n="recent_ops">Последние операции</div>
       <div id="tx-list" class="tx-list"></div>
     </div>
     <div class="tab-pane" data-pane="credit">
-      <div class="section-title">Подать заявку на кредитную карту</div>
+      <div class="section-title" data-i18n="credit_apply_title">Подать заявку на кредитную карту</div>
       <div id="pre-approval-msg"></div>
       <div class="form-row">
-        <label>Выберите клиента</label>
+        <label data-i18n="credit_select_client">Выберите клиента</label>
         <select id="credit-client-select"></select>
       </div>
-      <button class="btn primary" id="credit-apply-btn" type="button">Подать заявку</button>
+      <button class="btn primary" id="credit-apply-btn" type="button" data-i18n="credit_apply_btn">Подать заявку</button>
       <div id="credit-apply-result"></div>
 
-      <div class="section-title" style="margin-top:24px">Мои карты</div>
+      <div class="section-title" style="margin-top:24px" data-i18n="my_cards">Мои карты</div>
       <div id="cards-list"></div>
     </div>
   </div>
@@ -235,6 +245,125 @@
   <script>
   (function(){
     "use strict";
+
+    // ---- i18n ----
+    const T = {
+      ru: {
+        balance_label:      "остаток на счёте",
+        profile_label:      "Профиль",
+        tab_transfers:      "Переводы",
+        tab_credit:         "Кредитная карта",
+        banner_top:         "⭐ Самая крутая кредитная карта! ⭐",
+        banner_title:       "Кредитная карта",
+        banner_sub:         "Бесплатно за 1 минуту",
+        transfer_title:     "Перевести",
+        transfer_to:        "Кому",
+        transfer_to_ph:     "имя или ID получателя",
+        transfer_amount:    "Сумма, ₽",
+        transfer_btn:       "Перевести",
+        recent_ops:         "Последние операции",
+        credit_apply_title: "Подать заявку на кредитную карту",
+        credit_select_client:"Выберите клиента",
+        credit_apply_btn:   "Подать заявку",
+        my_cards:           "Мои карты",
+        activate_btn:       "Активировать карту",
+        card_active:        "Активна",
+        card_inactive:      "Не активирована",
+        card_number:        "Номер карты",
+        card_limit:         "Лимит",
+        preapproval_ok:     (limit) => `✓ Вы, скорее всего, получите одобрение — предварительный лимит до ${limit} ₽.`,
+        preapproval_overdue:"У вас есть история просрочек — решение будет принято индивидуально.",
+        preapproval_neutral:"Заполните заявку — мы рассмотрим её индивидуально.",
+        applying:           "Отправляем заявку…",
+        approved:           (limit, rate, reason) => `Заявка одобрена! Лимит: ${limit} ₽${rate ? ` · Ставка: ${rate}% годовых` : ""}<br/>${reason || ""}`,
+        declined:           (reason) => `Отказ: ${reason || "нет данных"}`,
+        no_profile:         "список клиентов загружается, попробуй ещё раз",
+        no_cards:           "Карт пока нет",
+        tx_types: {
+          transfer_in:    "Перевод входящий",
+          transfer_out:   "Перевод исходящий",
+          card_purchase:  "Оплата картой",
+          atm_withdraw:   "Снятие в банкомате",
+          salary:         "Зарплата",
+          utility_payment:"Коммунальные",
+        },
+        sent: (amount, to) => `Отправлено ${amount} ₽<br/>получатель: ${to}`,
+        err_fields:  "введи получателя и сумму",
+        err_server:  "сервер не ответил",
+        err_tx:      "Не удалось загрузить операции",
+        no_tx:       "Операций пока нет",
+      },
+      en: {
+        balance_label:      "account balance",
+        profile_label:      "Profile",
+        tab_transfers:      "Transfers",
+        tab_credit:         "Credit Card",
+        banner_top:         "⭐ The best credit card! ⭐",
+        banner_title:       "Credit Card",
+        banner_sub:         "Free in 1 minute",
+        transfer_title:     "Send money",
+        transfer_to:        "To",
+        transfer_to_ph:     "name or recipient ID",
+        transfer_amount:    "Amount, ₽",
+        transfer_btn:       "Send",
+        recent_ops:         "Recent transactions",
+        credit_apply_title: "Apply for a credit card",
+        credit_select_client:"Select customer",
+        credit_apply_btn:   "Apply now",
+        my_cards:           "My cards",
+        activate_btn:       "Activate card",
+        card_active:        "Active",
+        card_inactive:      "Not activated",
+        card_number:        "Card number",
+        card_limit:         "Limit",
+        preapproval_ok:     (limit) => `✓ You are likely to be approved — estimated limit up to ${limit} ₽.`,
+        preapproval_overdue:"You have a history of overdue payments — your application will be reviewed individually.",
+        preapproval_neutral:"Submit your application — we will review it individually.",
+        applying:           "Submitting application…",
+        approved:           (limit, rate, reason) => `Approved! Limit: ${limit} ₽${rate ? ` · Rate: ${rate}% p.a.` : ""}<br/>${reason || ""}`,
+        declined:           (reason) => `Declined: ${reason || "no details"}`,
+        no_profile:         "client list is loading, please try again",
+        no_cards:           "No cards yet",
+        tx_types: {
+          transfer_in:    "Incoming transfer",
+          transfer_out:   "Outgoing transfer",
+          card_purchase:  "Card payment",
+          atm_withdraw:   "ATM withdrawal",
+          salary:         "Salary",
+          utility_payment:"Utilities",
+        },
+        sent: (amount, to) => `Sent ${amount} ₽<br/>recipient: ${to}`,
+        err_fields:  "enter recipient and amount",
+        err_server:  "server did not respond",
+        err_tx:      "Failed to load transactions",
+        no_tx:       "No transactions yet",
+      },
+    };
+
+    let lang = localStorage.getItem("raif_lang") || "ru";
+    const langBtn = document.getElementById("lang-btn");
+
+    function applyLang() {
+      const t = T[lang];
+      document.querySelectorAll("[data-i18n]").forEach(el => {
+        const key = el.dataset.i18n;
+        if (typeof t[key] === "string") el.textContent = t[key];
+      });
+      document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+        const key = el.dataset.i18nPlaceholder;
+        if (t[key]) el.placeholder = t[key];
+      });
+      langBtn.textContent = lang === "ru" ? "EN" : "RU";
+      localStorage.setItem("raif_lang", lang);
+    }
+
+    langBtn.addEventListener("click", () => {
+      lang = lang === "ru" ? "en" : "ru";
+      applyLang();
+    });
+
+    applyLang();
+
     const fmt = new Intl.NumberFormat("ru-RU");
     const sel = document.getElementById("client-select");
     const balanceV = document.getElementById("balance-v");
@@ -287,7 +416,7 @@
         const d = await r.json();
         const items = d.items || [];
         if (!items.length) {
-          txList.innerHTML = `<div class="empty">Операций пока нет</div>`;
+          txList.innerHTML = `<div class="empty">${T[lang].no_tx}</div>`;
           return;
         }
         txList.innerHTML = items.map(t => {
@@ -303,19 +432,12 @@
           </div>`;
         }).join("");
       } catch(e) {
-        txList.innerHTML = `<div class="empty">Не удалось загрузить операции</div>`;
+        txList.innerHTML = `<div class="empty">${T[lang].err_tx}</div>`;
       }
     }
 
-    function typeLabel(t) {
-      return ({
-        transfer_in:    "Перевод входящий",
-        transfer_out:   "Перевод исходящий",
-        card_purchase:  "Оплата картой",
-        atm_withdraw:   "Снятие в банкомате",
-        salary:         "Зарплата",
-        utility_payment:"Коммунальные",
-      })[t] || t;
+    function typeLabel(type) {
+      return T[lang].tx_types[type] || type;
     }
 
     function setBalance(newAmount) {
@@ -335,7 +457,7 @@
       const to = (data.get("to") || "").trim();
       const amount = +data.get("amount");
       if (!to || amount <= 0) {
-        transferResult.innerHTML = `<div class="alert error">введи получателя и сумму</div>`;
+        transferResult.innerHTML = `<div class="alert error">${T[lang].err_fields}</div>`;
         return;
       }
 
@@ -353,11 +475,10 @@
         const d = await r.json();
         if (r.ok) {
           const kindLabel = d.kind === "internal"
-            ? `${d.to} (клиент банка)`
-            : `${d.to} (внешний счёт)`;
+            ? `${d.to} (${lang === "ru" ? "клиент банка" : "bank client"})`
+            : `${d.to} (${lang === "ru" ? "внешний счёт" : "external account"})`;
           transferResult.innerHTML =
-            `<div class="alert ok">Отправлено ${fmt.format(d.amount_rub)} ₽<br/>
-             получатель: ${kindLabel}</div>`;
+            `<div class="alert ok">${T[lang].sent(fmt.format(d.amount_rub), kindLabel)}</div>`;
           setBalance(d.new_balance_rub);
           transferForm.reset();
           loadTx(opt.value);
@@ -367,7 +488,7 @@
         }
       } catch(e) {
         transferResult.innerHTML =
-          `<div class="alert error">сервер не ответил</div>`;
+          `<div class="alert error">${T[lang].err_server}</div>`;
       }
     });
 
@@ -377,15 +498,16 @@
     function showPreApproval() {
       const opt = creditClientSel.selectedOptions[0];
       if (!opt) return;
+      const t = T[lang];
       const income = +opt.dataset.income || 0;
       const overdue = opt.dataset.overdue === "true";
       if (overdue) {
-        preApprovalMsg.innerHTML = `<div class="alert info" style="margin-bottom:12px">У вас есть история просрочек — решение будет принято индивидуально.</div>`;
+        preApprovalMsg.innerHTML = `<div class="alert info" style="margin-bottom:12px">${t.preapproval_overdue}</div>`;
       } else if (income > 0) {
         const limit = Math.round(income * 12 * 0.30);
-        preApprovalMsg.innerHTML = `<div class="alert ok" style="margin-bottom:12px">✓ Вы, скорее всего, получите одобрение — предварительный лимит до ${fmt.format(limit)} ₽.</div>`;
+        preApprovalMsg.innerHTML = `<div class="alert ok" style="margin-bottom:12px">${t.preapproval_ok(fmt.format(limit))}</div>`;
       } else {
-        preApprovalMsg.innerHTML = `<div class="alert info" style="margin-bottom:12px">Заполните заявку — мы рассмотрим её индивидуально.</div>`;
+        preApprovalMsg.innerHTML = `<div class="alert info" style="margin-bottom:12px">${t.preapproval_neutral}</div>`;
       }
     }
 
@@ -405,20 +527,21 @@
         const d = await r.json();
         const items = d.items || d.cards || [];
         if (!items.length) {
-          cardsList.innerHTML = `<div class="empty">Карт пока нет</div>`;
+          cardsList.innerHTML = `<div class="empty">${T[lang].no_cards}</div>`;
           return;
         }
         cardsList.innerHTML = items.map(c => {
-          const statusLabel = c.status === "active" ? "Активна" : "Не активирована";
+          const t = T[lang];
+          const statusLabel = c.status === "active" ? t.card_active : t.card_inactive;
           const statusColor = c.status === "active" ? "var(--good)" : "var(--warn)";
           const activateBtn = c.status !== "active"
-            ? `<button class="btn" style="margin-top:8px" data-card-id="${c.card_id}" onclick="activateCard('${c.card_id}')">Активировать карту</button>`
+            ? `<button class="btn" style="margin-top:8px" onclick="activateCard('${c.card_id}')">${t.activate_btn}</button>`
             : "";
           return `<div style="padding:14px;border:1px solid var(--rule);border-radius:8px;margin-bottom:12px;">
-            <div style="font-size:12px;color:var(--muted)">Номер карты</div>
+            <div style="font-size:12px;color:var(--muted)">${t.card_number}</div>
             <div style="font-weight:500;letter-spacing:0.08em">${c.card_number || c.card_id}</div>
             <div style="margin-top:6px;font-size:12px;color:${statusColor}">${statusLabel}</div>
-            <div style="font-size:12px;color:var(--text-2);margin-top:4px">Лимит: ${fmt.format(c.credit_limit_rub || c.limit || 0)} ₽</div>
+            <div style="font-size:12px;color:var(--text-2);margin-top:4px">${t.card_limit}: ${fmt.format(c.credit_limit_rub || c.limit || 0)} ₽</div>
             ${activateBtn}
           </div>`;
         }).join("");
@@ -442,8 +565,8 @@
 
     applyBtn.addEventListener("click", async () => {
       const opt = creditClientSel.selectedOptions[0] || sel.selectedOptions[0];
-      if (!opt) { applyResult.innerHTML = `<div class="alert error">список клиентов загружается, попробуй ещё раз</div>`; return; }
-      applyResult.innerHTML = `<div class="alert info">Отправляем заявку…</div>`;
+      if (!opt) { applyResult.innerHTML = `<div class="alert error">${T[lang].no_profile}</div>`; return; }
+      applyResult.innerHTML = `<div class="alert info">${T[lang].applying}</div>`;
       try {
         const r = await fetch("/api/credit-apply", {
           method: "POST",
@@ -451,17 +574,17 @@
           body: JSON.stringify({customer_id: opt.value}),
         });
         const d = await r.json();
+        const t = T[lang];
         if (r.ok && d.approved) {
-          const rateStr = d.rate_pct ? ` · Ставка: ${d.rate_pct}% годовых` : "";
-          applyResult.innerHTML = `<div class="alert ok">Заявка одобрена! Лимит: ${fmt.format(d.limit)} ₽${rateStr}<br/>${d.reason || ""}</div>`;
+          applyResult.innerHTML = `<div class="alert ok">${t.approved(fmt.format(d.limit), d.rate_pct, d.reason)}</div>`;
           loadCards(opt.value);
         } else if (r.ok) {
-          applyResult.innerHTML = `<div class="alert error">Отказ: ${d.reason || "нет данных"}</div>`;
+          applyResult.innerHTML = `<div class="alert error">${t.declined(d.reason)}</div>`;
         } else {
           applyResult.innerHTML = `<div class="alert error">${d.detail || "ошибка"}</div>`;
         }
       } catch(e) {
-        applyResult.innerHTML = `<div class="alert error">сервер не ответил</div>`;
+        applyResult.innerHTML = `<div class="alert error">${T[lang].err_server}</div>`;
       }
     });
 
