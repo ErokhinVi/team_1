@@ -41,6 +41,16 @@ _clients_by_id: dict[str, dict[str, Any]] = {}
 _transactions: list[dict[str, Any]] = []
 _credit_cards: list[dict[str, Any]] = []
 _credit_cards_by_id: dict[str, dict[str, Any]] = {}
+_brokerage_accounts: dict[str, dict[str, Any]] = {}
+_brokerage_orders: list[dict[str, Any]] = []
+
+MOCK_PRICES: dict[str, float] = {
+    "SBER": 312.5,
+    "GAZP": 163.2,
+    "LKOH": 7240.0,
+    "YNDX": 4150.0,
+    "MGNT": 5980.0,
+}
 
 
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -208,3 +218,85 @@ async def activate_credit_card(card_id: str) -> dict:
         raise HTTPException(status_code=400, detail=f"карту нельзя активировать: статус '{card['status']}'")
     card["status"] = "active"
     return {"card_id": card_id, "status": card["status"]}
+
+
+@app.post("/brokerage/accounts")
+async def create_brokerage_account(payload: dict) -> dict:
+    customer_id = payload.get("customer_id")
+    if not customer_id or customer_id not in _clients_by_id:
+        raise HTTPException(status_code=404, detail="клиент не найден")
+    if customer_id in _brokerage_accounts:
+        raise HTTPException(status_code=400, detail="брокерский счёт уже существует")
+    account = {
+        "account_id": f"brok-{customer_id}",
+        "customer_id": customer_id,
+        "balance_rub": 0.0,
+        "status": "active",
+        "created_at": datetime.now().replace(microsecond=0).isoformat(),
+    }
+    _brokerage_accounts[customer_id] = account
+    return {"account_id": account["account_id"], "status": account["status"]}
+
+
+@app.get("/brokerage/accounts/{customer_id}")
+async def get_brokerage_account(customer_id: str) -> dict:
+    if customer_id not in _clients_by_id:
+        raise HTTPException(status_code=404, detail="клиент не найден")
+    account = _brokerage_accounts.get(customer_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="брокерский счёт не найден")
+    return account
+
+
+@app.post("/brokerage/orders")
+async def create_brokerage_order(payload: dict) -> dict:
+    customer_id = payload.get("customer_id")
+    ticker = (payload.get("ticker") or "").upper()
+    quantity = int(payload.get("quantity") or 0)
+    direction = payload.get("direction")
+    if not customer_id or customer_id not in _clients_by_id:
+        raise HTTPException(status_code=404, detail="клиент не найден")
+    if ticker not in MOCK_PRICES:
+        raise HTTPException(status_code=400, detail=f"неизвестный тикер; доступны: {', '.join(MOCK_PRICES)}")
+    if quantity <= 0:
+        raise HTTPException(status_code=400, detail="количество должно быть положительным")
+    if direction not in ("buy", "sell"):
+        raise HTTPException(status_code=400, detail="direction должен быть 'buy' или 'sell'")
+    account = _brokerage_accounts.get(customer_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="брокерский счёт не найден, сначала создайте его")
+    price = MOCK_PRICES[ticker]
+    total_rub = round(price * quantity, 2)
+    if direction == "buy":
+        client = _clients_by_id[customer_id]
+        if client["balance_rub"] < total_rub:
+            raise HTTPException(status_code=400, detail=f"недостаточно средств: на счёте {client['balance_rub']} ₽")
+        client["balance_rub"] = round(client["balance_rub"] - total_rub, 2)
+        account["balance_rub"] = round(account["balance_rub"] + total_rub, 2)
+    else:
+        if account["balance_rub"] < total_rub:
+            raise HTTPException(status_code=400, detail="недостаточно активов для продажи")
+        account["balance_rub"] = round(account["balance_rub"] - total_rub, 2)
+        client = _clients_by_id[customer_id]
+        client["balance_rub"] = round(client["balance_rub"] + total_rub, 2)
+    order_id = f"ord-{len(_brokerage_orders) + 1:06d}"
+    order = {
+        "order_id": order_id,
+        "customer_id": customer_id,
+        "ticker": ticker,
+        "quantity": quantity,
+        "direction": direction,
+        "price_rub": price,
+        "total_rub": total_rub,
+        "status": "executed",
+        "ts": datetime.now().replace(microsecond=0).isoformat(),
+    }
+    _brokerage_orders.append(order)
+    return {
+        "order_id": order_id,
+        "status": "executed",
+        "ticker": ticker,
+        "direction": direction,
+        "total_rub": total_rub,
+        "new_account_balance_rub": account["balance_rub"],
+    }

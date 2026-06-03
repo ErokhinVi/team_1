@@ -48,6 +48,34 @@ credit_limit_rub, status, created_at}`.
 Активировать карту (перевести статус из `approved` в `active`).
 Возвращает `{card_id, status}`. Ошибка `400`, если карта уже не в статусе `approved`.
 
+### POST /brokerage/accounts
+Открыть брокерский счёт клиенту. Принимает JSON `{customer_id}`.
+Возвращает `{account_id, status}`. Ошибка `400`, если счёт уже существует.
+
+### GET /brokerage/accounts/{customer_id}
+Получить брокерский счёт клиента. Возвращает `{account_id, customer_id,
+balance_rub, status, created_at}`. Ошибка `404`, если счёта нет.
+
+### POST /brokerage/orders
+Разместить биржевую заявку. Принимает JSON `{customer_id, ticker, quantity, direction}`.
+`ticker` — один из: `SBER`, `GAZP`, `LKOH`, `YNDX`, `MGNT`.
+`direction` — `buy` или `sell`.
+При покупке деньги списываются с банковского счёта клиента, зачисляются на брокерский.
+При продаже — обратно. Возвращает `{order_id, status, ticker, direction, total_rub, new_account_balance_rub}`.
+
+## Рекомендуемый порядок вызовов для брокериджа
+
+Для коллеги на **cib** — каталог акций и рекомендации:
+1. Вызови `GET /clients/{customer_id}` — получи `risk_score` и `income_rub`.
+2. На основе `risk_score` сформируй рекомендованный портфель и верни retail.
+3. Доступные тикеры: `SBER`, `GAZP`, `LKOH`, `YNDX`, `MGNT`.
+
+Для коллеги на **retail** — полный флоу:
+1. Покажи каталог акций из cib (`GET /products/brokerage`).
+2. Вызови `GET /brokerage/accounts/{customer_id}` — если `404`, сначала создай счёт через `POST /brokerage/accounts`.
+3. Покажи баланс брокерского счёта и рекомендацию из cib.
+4. При покупке/продаже вызови `POST /brokerage/orders` с `{customer_id, ticker, quantity, direction}`.
+
 ## Рекомендуемый порядок вызовов для кредитной карты
 
 Для коллеги на **cib** — когда клиент подаёт заявку на карту:
