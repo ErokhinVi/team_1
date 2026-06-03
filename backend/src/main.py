@@ -382,6 +382,29 @@ async def get_corporate_account(account_id: str) -> dict:
     return corp
 
 
+@app.post("/corporate/payment-auth")
+async def corporate_payment_auth(payload: dict) -> dict:
+    from_id = payload.get("from_account_id")
+    to_id = payload.get("to_account_id")
+    amount = int(payload.get("amount_rub") or 0)
+    if not from_id or from_id not in _corporate_accounts_by_id:
+        raise HTTPException(status_code=404, detail="счёт отправителя не найден")
+    if not to_id or to_id not in _corporate_accounts_by_id:
+        raise HTTPException(status_code=404, detail="счёт получателя не найден")
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="сумма должна быть положительной")
+    sender = _corporate_accounts_by_id[from_id]
+    authorized = sender["balance_rub"] >= amount
+    return {
+        "authorized": authorized,
+        "from_account_id": from_id,
+        "from_name": sender["name"],
+        "amount_rub": amount,
+        "available_balance_rub": sender["balance_rub"],
+        "reason": "OK" if authorized else "недостаточно средств на счёте",
+    }
+
+
 @app.post("/corporate/payments")
 async def corporate_payment(payload: dict) -> dict:
     from_id = payload.get("from_account_id")
