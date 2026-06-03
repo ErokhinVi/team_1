@@ -47,8 +47,8 @@ Returns 404 if customer not found.
 Personalised deposit offer. Accepts JSON `{"customer_id": "<id>", "amount_rub": int, "term_months": int}`.
 Returns `{"approved": bool, "reason": "...", "rate_pct": float|null, "term_months": int, "amount_rub": int}`.
 Rules: minimum 10,000 RUB; term 3–36 months.
-Rate = base rate by term (3m→7%, 6m→9.5%, 12m→12%, 24m→11%, 36m→10.5%) + segment bonus (mass/sme: +0%, mass_affluent: +1%, premium/private: +2%).
-Rates match backend's actual deposit schedule to avoid misleading customers.
+Rate = 20% base + segment bonus (mass/sme: +0%, mass_affluent: +1%, premium/private: +2%), so 20–22%.
+Retail must forward this `rate_pct` to backend `POST /deposits` so the customer is actually paid the quoted rate.
 Returns 404 if customer not found.
 
 ### POST /loan/decision

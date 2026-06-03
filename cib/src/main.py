@@ -21,7 +21,7 @@ BACKEND_URL = os.environ.get("BACKEND_URL", "https://raif-a-backend.onrender.com
 
 PRODUCTS = [
     {"id": "card-debit", "kind": "card", "name": "Дебетовая карта", "segment": "mass"},
-    {"id": "deposit-base", "kind": "deposit", "name": "Срочный депозит", "rate_pct": 14.0, "rate_max_pct": 14.0},
+    {"id": "deposit-base", "kind": "deposit", "name": "Срочный депозит", "rate_pct": 20.0, "rate_max_pct": 22.0},
     {"id": "card-credit", "kind": "card", "name": "Кредитная карта", "segment": "mass"},
     {"id": "brokerage-standard", "kind": "brokerage", "name": "Брокерский счёт", "segment": "mass"},
     {"id": "brokerage-premium", "kind": "brokerage", "name": "Брокерский счёт Премиум", "segment": "premium"},
@@ -345,11 +345,7 @@ async def deposit_terms(req: DepositTermsRequest) -> dict:
         return decline("Maximum deposit term is 36 months")
 
     # Base rates match backend's actual schedule; premium customers get a bonus
-    base_rates = {3: 7.0, 6: 9.5, 12: 12.0, 24: 11.0, 36: 10.5}
-    # Find closest term in schedule
-    closest_term = min(base_rates.keys(), key=lambda t: abs(t - req.term_months))
-    base_rate = base_rates[closest_term]
-
+    base_rate = 20.0
     bonus = 2.0 if segment in ("premium", "private") else 1.0 if segment == "mass_affluent" else 0.0
     rate_pct = round(base_rate + bonus, 1)
 
