@@ -922,15 +922,16 @@
         if (!r.ok) { depositCheckResult.innerHTML = `<div class="alert error">${d.detail || "ошибка"}</div>`; return; }
         if (!d.approved) { depositCheckResult.innerHTML = `<div class="alert error">Отказ: ${d.reason || "нет данных"}</div>`; return; }
         depositCheckResult.innerHTML = "";
-        pendingDeposit = {customer_id: clientId, amount_rub: d.amount_rub, term_months: d.term_months};
+        pendingDeposit = {customer_id: clientId, amount_rub: d.amount_rub, term_months: d.term_months, quoted_rate_pct: d.rate_pct};
         const earned = Math.round(d.amount_rub * d.rate_pct / 100 * d.term_months / 12);
         depositOfferDetails.innerHTML = `
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <div><div style="font-size:11px;color:var(--muted)">Сумма</div><div style="font-weight:600">${fmt.format(d.amount_rub)} ₽</div></div>
             <div><div style="font-size:11px;color:var(--muted)">Срок</div><div style="font-weight:600">${d.term_months} мес.</div></div>
-            <div><div style="font-size:11px;color:var(--muted)">Ставка</div><div style="font-weight:600">${d.rate_pct}% годовых</div></div>
-            <div><div style="font-size:11px;color:var(--muted)">Доход</div><div style="font-weight:600;color:var(--good)">+${fmt.format(earned)} ₽</div></div>
-          </div>`;
+            <div><div style="font-size:11px;color:var(--muted)">Ставка (предв.)</div><div style="font-weight:600">${d.rate_pct}% годовых</div></div>
+            <div><div style="font-size:11px;color:var(--muted)">Доход (оценка)</div><div style="font-weight:600;color:var(--good)">+${fmt.format(earned)} ₽</div></div>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:8px">Предварительные условия. Итоговая ставка фиксируется при открытии вклада.</div>`;
         depositOffer.style.display = "block";
       } catch(e) { depositCheckResult.innerHTML = `<div class="alert error">Сервер не ответил</div>`; }
     });
@@ -950,11 +951,15 @@
           const opt = sel.selectedOptions[0];
           if (opt) opt.dataset.balance = d.new_balance_rub;
           updateBalanceDisplay(d.new_balance_rub, +balanceBroker.textContent.replace(/\s/g,"") || 0);
+          const quoted = pendingDeposit ? pendingDeposit.quoted_rate_pct : null;
+          const rateNote = (quoted != null && d.rate_pct != null && Number(quoted) !== Number(d.rate_pct))
+            ? `<br/><span style="font-size:11px;color:var(--warn)">Внимание: итоговая ставка ${d.rate_pct}% отличается от предварительной ${quoted}%.</span>`
+            : "";
           depositOpenResult.innerHTML = `<div class="alert ok">
             Вклад открыт! ${fmt.format(d.amount_rub)} ₽ размещено.<br/>
             Ставка: ${d.rate_pct}% годовых · Срок: ${d.term_months} мес.<br/>
             Новый баланс: ${fmt.format(d.new_balance_rub)} ₽<br/>
-            <span style="font-size:11px;color:var(--good)">Номер вклада: ${d.deposit_id}</span>
+            <span style="font-size:11px;color:var(--good)">Номер вклада: ${d.deposit_id}</span>${rateNote}
           </div>`;
           pendingDeposit = null;
         } else {
