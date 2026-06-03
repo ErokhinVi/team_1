@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=414,initial-scale=1" />
+  <title>Райф · Брокераж</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f6f3ec; --surface: #ffffff; --rule: #e3ddcc;
+      --text: #1f1d18; --text-2: #5a564c; --muted: #8a857a;
+      --raiff: #FFE600; --good: #2f7a3a; --warn: #a4662d; --bad: #b14b32;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text);
+      font-family: "Geist", -apple-system, system-ui, sans-serif;
+      font-size: 14px; min-height: 100vh; }
+    .phone { max-width: 420px; margin: 0 auto; background: var(--surface);
+      min-height: 100vh; box-shadow: 0 0 60px rgba(60,52,40,0.08); }
+    .topbar { background: var(--text); color: var(--bg); padding: 28px 22px 16px; }
+    .topbar .logo { width: 26px; height: 26px; background: var(--raiff);
+      display: inline-block; border-radius: 4px; vertical-align: middle; margin-right: 10px; }
+    .topbar .name { font-weight: 500; font-size: 16px; vertical-align: middle; }
+    .topbar .sub { font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+    .back-link { display: inline-block; margin: 16px 22px 0;
+      font-size: 13px; color: var(--text-2); text-decoration: none; }
+    .back-link:hover { color: var(--text); }
+    .section { padding: 20px 22px 0; }
+    .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em;
+      color: var(--muted); margin-bottom: 10px; }
+    .balance-box { background: var(--bg); border-radius: 10px; padding: 16px;
+      margin-bottom: 20px; }
+    .balance-box .l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+    .balance-box .v { font-size: 26px; font-weight: 500; margin-top: 4px; }
+    .stocks-table { width: 100%; border-collapse: collapse; }
+    .stocks-table th { font-size: 11px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.1em; text-align: left; padding-bottom: 8px; font-weight: 500; }
+    .stocks-table td { padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 13px; }
+    .stocks-table tr:last-child td { border-bottom: 0; }
+    .ticker { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .price { color: var(--text-2); font-variant-numeric: tabular-nums; }
+    .rec-box { background: #f0ead0; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; }
+    .rec-box .note { font-size: 13px; color: var(--warn); margin-bottom: 10px; line-height: 1.4; }
+    .rec-row { display: flex; justify-content: space-between; font-size: 13px;
+      padding: 4px 0; border-bottom: 1px solid rgba(164,102,45,0.15); }
+    .rec-row:last-child { border-bottom: 0; }
+    .form-row { margin-bottom: 14px; }
+    .form-row label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
+    .form-row input, .form-row select { width: 100%; padding: 10px 12px;
+      background: var(--bg); color: var(--text); border: 1px solid var(--rule);
+      border-radius: 6px; font-family: inherit; font-size: 14px; }
+    .form-row input:focus, .form-row select:focus { outline: 0; border-color: var(--text); }
+    .btn-row { display: flex; gap: 10px; }
+    .btn { flex: 1; padding: 13px; background: var(--text); color: var(--bg);
+      border: 0; border-radius: 8px; font-family: inherit; font-weight: 500;
+      font-size: 14px; cursor: pointer; transition: background 160ms; }
+    .btn:hover { background: #2c2823; }
+    .btn.buy { background: var(--good); color: #fff; }
+    .btn.buy:hover { background: #236030; }
+    .btn.sell { background: var(--bad); color: #fff; }
+    .btn.sell:hover { background: #8c3a25; }
+    .alert { margin-top: 16px; padding: 12px 14px; border-radius: 6px;
+      font-size: 13px; line-height: 1.5; }
+    .alert.ok { background: #e8f0e2; color: var(--good); }
+    .alert.error { background: #f4dfd6; color: var(--bad); }
+    .client-picker { padding: 14px 22px; border-bottom: 1px solid var(--rule); }
+    .client-picker label { font-size: 11px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.1em; }
+    .client-picker select { width: 100%; margin-top: 4px; padding: 8px 10px;
+      border: 1px solid var(--rule); background: var(--surface);
+      border-radius: 6px; font-family: inherit; font-size: 13px; }
+    .spinner { text-align: center; padding: 30px 0; color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="topbar">
+      <div><span class="logo"></span><span class="name">Райф</span></div>
+      <div class="sub">Брокераж</div>
+    </div>
+
+    <a class="back-link" href="/">← На главную</a>
+
+    <div class="client-picker">
+      <label>Профиль</label>
+      <select id="client-select"></select>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Брокерский счёт</div>
+      <div class="balance-box">
+        <div class="l">баланс</div>
+        <div class="v" id="broker-balance">—</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Доступные акции</div>
+      <div id="stocks-area"><div class="spinner">Загружаем…</div></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Рекомендация</div>
+      <div id="rec-area"><div class="spinner">Загружаем…</div></div>
+    </div>
+
+    <div class="section" style="padding-bottom:40px">
+      <div class="section-title">Разместить заявку</div>
+      <div class="form-row">
+        <label>Акция (тикер)</label>
+        <select id="order-ticker">
+          <option value="">— выберите —</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Количество лотов</label>
+        <input id="order-qty" type="number" min="1" value="1" />
+      </div>
+      <div class="btn-row">
+        <button class="btn buy" id="btn-buy">Купить</button>
+        <button class="btn sell" id="btn-sell">Продать</button>
+      </div>
+      <div id="order-result"></div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    "use strict";
+    const fmt = new Intl.NumberFormat("ru-RU");
+    const sel = document.getElementById("client-select");
+    const brokerBalance = document.getElementById("broker-balance");
+    const stocksArea = document.getElementById("stocks-area");
+    const recArea = document.getElementById("rec-area");
+    const orderTicker = document.getElementById("order-ticker");
+    const orderQty = document.getElementById("order-qty");
+    const orderResult = document.getElementById("order-result");
+
+    async function loadClients() {
+      try {
+        const r = await fetch("/clients?limit=200");
+        const d = await r.json();
+        const items = (d.items || []).slice(0, 80);
+        sel.innerHTML = items.map(c =>
+          `<option value="${c.id}">${c.name}</option>`
+        ).join("");
+        if (items.length) onPickClient();
+      } catch(e) { console.error(e); }
+    }
+
+    async function onPickClient() {
+      const clientId = sel.value;
+      if (!clientId) return;
+      loadAccount(clientId);
+      loadRecommendation(clientId);
+    }
+    sel.addEventListener("change", onPickClient);
+
+    async function loadAccount(clientId) {
+      brokerBalance.textContent = "…";
+      try {
+        const r = await fetch(`/api/brokerage/account/${clientId}`);
+        const d = await r.json();
+        brokerBalance.textContent = fmt.format(d.balance_rub || 0) + " ₽";
+      } catch(e) { brokerBalance.textContent = "ошибка"; }
+    }
+
+    async function loadStocks() {
+      try {
+        const r = await fetch("/api/brokerage/stocks");
+        const d = await r.json();
+        const items = d.items || [];
+        if (!items.length) { stocksArea.innerHTML = "<div class='spinner'>Нет данных</div>"; return; }
+        orderTicker.innerHTML = `<option value="">— выберите —</option>` +
+          items.map(s => `<option value="${s.ticker}">${s.ticker} — ${s.company}</option>`).join("");
+        stocksArea.innerHTML = `<table class="stocks-table">
+          <thead><tr><th>Тикер</th><th>Компания</th><th>Цена, ₽</th></tr></thead>
+          <tbody>${items.map(s => `<tr>
+            <td class="ticker">${s.ticker}</td>
+            <td>${s.company}</td>
+            <td class="price">${fmt.format(s.price_rub)}</td>
+          </tr>`).join("")}</tbody>
+        </table>`;
+      } catch(e) { stocksArea.innerHTML = "<div class='spinner'>Не удалось загрузить</div>"; }
+    }
+
+    async function loadRecommendation(clientId) {
+      recArea.innerHTML = "<div class='spinner'>Загружаем…</div>";
+      try {
+        const r = await fetch(`/api/brokerage/recommendation/${clientId}`);
+        const d = await r.json();
+        const rows = (d.portfolio || []).map(p =>
+          `<div class="rec-row"><span>${p.ticker}</span><span>${p.allocation_pct}%</span></div>`
+        ).join("");
+        recArea.innerHTML = `<div class="rec-box">
+          <div class="note">${d.note || ""}</div>
+          ${rows}
+        </div>`;
+      } catch(e) { recArea.innerHTML = "<div class='spinner'>Не удалось загрузить</div>"; }
+    }
+
+    async function placeOrder(direction) {
+      const clientId = sel.value;
+      const ticker = orderTicker.value;
+      const quantity = parseInt(orderQty.value, 10);
+      if (!clientId || !ticker || !quantity || quantity < 1) {
+        orderResult.innerHTML = `<div class="alert error">Выберите акцию и укажите количество</div>`;
+        return;
+      }
+      orderResult.innerHTML = `<div class="alert ok" style="background:#f0ead0;color:var(--warn)">Отправляем заявку…</div>`;
+      try {
+        const r = await fetch("/api/brokerage/orders", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({customer_id: clientId, ticker, quantity, direction}),
+        });
+        const d = await r.json();
+        if (r.ok) {
+          const label = direction === "buy" ? "Куплено" : "Продано";
+          orderResult.innerHTML = `<div class="alert ok">${label}: ${ticker} × ${quantity}<br/>
+            Итого: ${fmt.format(d.total_rub)} ₽<br/>
+            Баланс счёта: ${fmt.format(d.new_account_balance_rub)} ₽</div>`;
+          brokerBalance.textContent = fmt.format(d.new_account_balance_rub) + " ₽";
+        } else {
+          orderResult.innerHTML = `<div class="alert error">${d.detail || "ошибка"}</div>`;
+        }
+      } catch(e) {
+        orderResult.innerHTML = `<div class="alert error">Сервер не ответил</div>`;
+      }
+    }
+
+    document.getElementById("btn-buy").addEventListener("click", () => placeOrder("buy"));
+    document.getElementById("btn-sell").addEventListener("click", () => placeOrder("sell"));
+
+    loadClients();
+    loadStocks();
+  })();
+  </script>
+</body>
+</html>

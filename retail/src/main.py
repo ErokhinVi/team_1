@@ -67,6 +67,68 @@ async def api_transfer(payload: dict) -> dict:
     return r.json()
 
 
+@app.get("/brokerage", response_class=HTMLResponse)
+async def brokerage_page() -> str:
+    f = STATIC_DIR / "brokerage.html"
+    return f.read_text(encoding="utf-8") if f.exists() else "<h1>Brokerage</h1>"
+
+
+async def _cib_get(path: str, params: dict | None = None) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(f"{CIB_URL}{path}", params=params)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"cib недоступен: {exc}")
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:300])
+    return r.json()
+
+
+@app.get("/api/brokerage/stocks")
+async def brokerage_stocks() -> dict:
+    return await _cib_get("/products/brokerage")
+
+
+@app.get("/api/brokerage/account/{customer_id}")
+async def brokerage_account(customer_id: str) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(f"{BACKEND_URL}/brokerage/accounts/{customer_id}")
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"backend недоступен: {exc}")
+    if r.status_code == 404:
+        # auto-open account
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                r2 = await client.post(f"{BACKEND_URL}/brokerage/accounts",
+                                       json={"customer_id": customer_id})
+            if r2.status_code == 200:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    r = await client.get(f"{BACKEND_URL}/brokerage/accounts/{customer_id}")
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail=f"backend недоступен: {exc}")
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:300])
+    return r.json()
+
+
+@app.get("/api/brokerage/recommendation/{customer_id}")
+async def brokerage_recommendation(customer_id: str) -> dict:
+    return await _cib_get(f"/brokerage/recommendation/{customer_id}")
+
+
+@app.post("/api/brokerage/orders")
+async def brokerage_order(payload: dict) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.post(f"{BACKEND_URL}/brokerage/orders", json=payload)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"backend недоступен: {exc}")
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:300])
+    return r.json()
+
+
 @app.post("/api/credit-apply")
 async def credit_apply(payload: dict) -> dict:
     customer_id = payload.get("customer_id")
