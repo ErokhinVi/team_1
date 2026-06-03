@@ -284,11 +284,22 @@ async def loan_decision(req: LoanDecisionRequest) -> dict:
         return {"approved": False, "reason": reason, "amount_rub": req.amount_rub,
                 "term_months": req.term_months, "rate_pct": None, "monthly_payment_rub": None}
 
+    # Minimum loan amount
+    if req.amount_rub < 10_000:
+        return decline("Declined: minimum loan amount is 10,000 RUB")
+
+    # Valid terms only
+    if req.term_months not in (6, 12, 24, 36, 60):
+        return decline("Declined: term must be 6, 12, 24, 36, or 60 months")
+
     if has_overdue:
         return decline("Declined: history of overdue payments on record")
 
-    if income_rub * 12 < req.amount_rub * 0.3:
-        return decline(f"Declined: requested amount exceeds 3.3× annual income ({income_rub * 12:,.0f} RUB)")
+    # Income-to-loan ratio — premium/private get 5× annual income, others 3.3×
+    income_multiplier = 5.0 if segment in ("premium", "private") else 3.3
+    if income_rub * 12 < req.amount_rub / income_multiplier:
+        max_loan = int(income_rub * 12 * income_multiplier)
+        return decline(f"Declined: requested amount exceeds maximum allowed ({max_loan:,.0f} RUB)")
 
     if segment in ("premium", "private"):
         rate_pct = round(12.0 + risk_score * 6.0, 1)

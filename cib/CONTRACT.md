@@ -46,7 +46,8 @@ Returns 404 if customer not found.
 ### POST /loan/decision
 Consumer loan decision. Accepts JSON `{"customer_id": "<id>", "amount_rub": int, "term_months": int}`.
 Returns `{"approved": bool, "reason": "...", "amount_rub": int, "term_months": int, "rate_pct": float|null, "monthly_payment_rub": int|null}`.
-Rules: declined if overdue history; if loan > 3.3× annual income; if monthly payment > 40% of monthly income.
+Rules (in order): minimum 10,000 RUB; term must be 6/12/24/36/60 months; no overdue history;
+loan ≤ 3.3× annual income (5× for premium/private); monthly payment ≤ 40% of monthly income.
 Rate by segment — mass/sme: 18–25%; mass_affluent: 15–22%; premium/private: 12–18% (adjusted by risk score).
 Monthly payment uses standard annuity formula, rounded to nearest 100 RUB.
 Returns 404 if customer not found.
