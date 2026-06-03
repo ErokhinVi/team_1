@@ -21,7 +21,7 @@ BACKEND_URL = os.environ.get("BACKEND_URL", "https://raif-a-backend.onrender.com
 
 PRODUCTS = [
     {"id": "card-debit", "kind": "card", "name": "Дебетовая карта", "segment": "mass"},
-    {"id": "deposit-base", "kind": "deposit", "name": "Срочный депозит", "rate_pct": 14.0},
+    {"id": "deposit-base", "kind": "deposit", "name": "Срочный депозит", "rate_pct": 20.0},
     {"id": "card-credit", "kind": "card", "name": "Кредитная карта", "segment": "mass"},
     {"id": "brokerage-standard", "kind": "brokerage", "name": "Брокерский счёт", "segment": "mass"},
     {"id": "brokerage-premium", "kind": "brokerage", "name": "Брокерский счёт Премиум", "segment": "premium"},
