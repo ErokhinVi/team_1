@@ -340,6 +340,54 @@
       },
     };
 
+    T.de = {
+      balance_label:      "Kontostand",
+      profile_label:      "Profil",
+      tab_transfers:      "Überweisungen",
+      tab_credit:         "Kreditkarte",
+      banner_top:         "⭐ Die beste Kreditkarte! ⭐",
+      banner_title:       "Kreditkarte",
+      banner_sub:         "Kostenlos in 1 Minute",
+      transfer_title:     "Geld senden",
+      transfer_to:        "An",
+      transfer_to_ph:     "Name oder Empfänger-ID",
+      transfer_amount:    "Betrag, ₽",
+      transfer_btn:       "Senden",
+      recent_ops:         "Letzte Transaktionen",
+      credit_apply_title: "Kreditkarte beantragen",
+      credit_select_client:"Kunde auswählen",
+      credit_apply_btn:   "Jetzt beantragen",
+      my_cards:           "Meine Karten",
+      activate_btn:       "Karte aktivieren",
+      card_active:        "Aktiv",
+      card_inactive:      "Nicht aktiviert",
+      card_number:        "Kartennummer",
+      card_limit:         "Limit",
+      preapproval_ok:     (limit) => `✓ Sie werden wahrscheinlich genehmigt — geschätztes Limit bis zu ${limit} ₽.`,
+      preapproval_overdue:"Sie haben eine Geschichte von Zahlungsverzügen — Ihr Antrag wird individuell geprüft.",
+      preapproval_neutral:"Stellen Sie Ihren Antrag — wir prüfen ihn individuell.",
+      applying:           "Antrag wird gesendet…",
+      approved:           (limit, rate, reason) => `Genehmigt! Limit: ${limit} ₽${rate ? ` · Zinssatz: ${rate}% p.a.` : ""}<br/>${reason || ""}`,
+      declined:           (reason) => `Abgelehnt: ${reason || "keine Details"}`,
+      no_profile:         "Kundenliste wird geladen, bitte erneut versuchen",
+      no_cards:           "Noch keine Karten",
+      tx_types: {
+        transfer_in:    "Eingehende Überweisung",
+        transfer_out:   "Ausgehende Überweisung",
+        card_purchase:  "Kartenzahlung",
+        atm_withdraw:   "Geldautomaten-Abhebung",
+        salary:         "Gehalt",
+        utility_payment:"Nebenkosten",
+      },
+      sent: (amount, to) => `Gesendet ${amount} ₽<br/>Empfänger: ${to}`,
+      err_fields:  "Empfänger und Betrag eingeben",
+      err_server:  "Server hat nicht geantwortet",
+      err_tx:      "Transaktionen konnten nicht geladen werden",
+      no_tx:       "Noch keine Transaktionen",
+    };
+
+    const langs = ["ru", "en", "de"];
+    const langLabels = { ru: "EN", en: "DE", de: "RU" };
     let lang = localStorage.getItem("raif_lang") || "ru";
     const langBtn = document.getElementById("lang-btn");
 
@@ -353,12 +401,12 @@
         const key = el.dataset.i18nPlaceholder;
         if (t[key]) el.placeholder = t[key];
       });
-      langBtn.textContent = lang === "ru" ? "EN" : "RU";
+      langBtn.textContent = langLabels[lang];
       localStorage.setItem("raif_lang", lang);
     }
 
     langBtn.addEventListener("click", () => {
-      lang = lang === "ru" ? "en" : "ru";
+      lang = langs[(langs.indexOf(lang) + 1) % langs.length];
       applyLang();
     });
 
