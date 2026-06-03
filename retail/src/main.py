@@ -230,6 +230,41 @@ async def brokerage_page() -> str:
     return f.read_text(encoding="utf-8") if f.exists() else "<h1>Brokerage</h1>"
 
 
+@app.get("/bonds", response_class=HTMLResponse)
+async def bonds_page() -> str:
+    f = STATIC_DIR / "bonds.html"
+    return f.read_text(encoding="utf-8") if f.exists() else "<h1>Bonds</h1>"
+
+
+@app.get("/api/bonds/catalogue")
+async def bonds_catalogue() -> dict:
+    return await _cib_get("/products/bonds")
+
+
+@app.get("/api/bonds/recommendation/{customer_id}")
+async def bonds_recommendation(customer_id: str) -> dict:
+    return await _cib_get(f"/bonds/recommendation/{customer_id}")
+
+
+@app.get("/api/bonds/holdings/{customer_id}")
+async def bonds_holdings(customer_id: str) -> dict:
+    return await _backend_get(f"/bonds/holdings/{customer_id}")
+
+
+@app.post("/api/bonds/orders")
+async def bonds_order(payload: dict) -> dict:
+    if not payload.get("customer_id"):
+        raise HTTPException(status_code=400, detail="customer_id required")
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.post(f"{BACKEND_URL}/bonds/orders", json=payload)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"backend недоступен: {exc}")
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:300])
+    return r.json()
+
+
 async def _cib_get(path: str, params: dict | None = None) -> dict:
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:

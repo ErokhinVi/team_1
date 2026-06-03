@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=414,initial-scale=1" />
+  <title>Райф · Облигации</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f6f3ec; --surface: #ffffff; --rule: #e3ddcc;
+      --text: #1f1d18; --text-2: #5a564c; --muted: #8a857a;
+      --raiff: #FFE600; --good: #2f7a3a; --warn: #a4662d; --bad: #b14b32;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text);
+      font-family: "Geist", -apple-system, system-ui, sans-serif;
+      font-size: 14px; min-height: 100vh; }
+    .phone { max-width: 420px; margin: 0 auto; background: var(--surface);
+      min-height: 100vh; box-shadow: 0 0 60px rgba(60,52,40,0.08); }
+    .topbar { background: var(--text); color: var(--bg); padding: 28px 22px 16px; }
+    .topbar .logo { width: 26px; height: 26px; background: var(--raiff);
+      display: inline-block; border-radius: 4px; vertical-align: middle; margin-right: 10px; }
+    .topbar .name { font-weight: 500; font-size: 16px; vertical-align: middle; }
+    .topbar .sub { font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+    .back-link { display: inline-block; margin: 16px 22px 0;
+      font-size: 13px; color: var(--text-2); text-decoration: none; }
+    .back-link:hover { color: var(--text); }
+    .section { padding: 20px 22px 0; }
+    .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em;
+      color: var(--muted); margin-bottom: 10px; }
+    .bonds-table { width: 100%; border-collapse: collapse; }
+    .bonds-table th { font-size: 11px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.1em; text-align: left; padding-bottom: 8px; font-weight: 500; }
+    .bonds-table td { padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 13px; vertical-align: top; }
+    .bonds-table tr:last-child td { border-bottom: 0; }
+    .bond-id { font-weight: 600; }
+    .bond-issuer { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 10px; margin-top: 3px; }
+    .tag.gov { background: #e8f0e2; color: var(--good); }
+    .tag.corp { background: #f0e8d0; color: var(--warn); }
+    .rec-box { background: #f0ead0; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; }
+    .rec-box .note { font-size: 13px; color: var(--warn); margin-bottom: 10px; line-height: 1.4; }
+    .rec-row { display: flex; justify-content: space-between; font-size: 13px;
+      padding: 4px 0; border-bottom: 1px solid rgba(164,102,45,0.15); }
+    .rec-row:last-child { border-bottom: 0; }
+    .holding-row { display: flex; justify-content: space-between; font-size: 13px;
+      padding: 10px 0; border-bottom: 1px solid var(--rule); }
+    .holding-row:last-child { border-bottom: 0; }
+    .form-row { margin-bottom: 14px; }
+    .form-row label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
+    .form-row input, .form-row select { width: 100%; padding: 10px 12px;
+      background: var(--bg); color: var(--text); border: 1px solid var(--rule);
+      border-radius: 6px; font-family: inherit; font-size: 14px; }
+    .form-row input:focus, .form-row select:focus { outline: 0; border-color: var(--text); }
+    .btn-row { display: flex; gap: 10px; }
+    .btn { flex: 1; padding: 13px; background: var(--text); color: var(--bg);
+      border: 0; border-radius: 8px; font-family: inherit; font-weight: 500;
+      font-size: 14px; cursor: pointer; transition: background 160ms; }
+    .btn.buy { background: var(--good); color: #fff; }
+    .btn.buy:hover { background: #236030; }
+    .btn.sell { background: var(--bad); color: #fff; }
+    .btn.sell:hover { background: #8c3a25; }
+    .alert { margin-top: 16px; padding: 12px 14px; border-radius: 6px; font-size: 13px; line-height: 1.5; }
+    .alert.ok { background: #e8f0e2; color: var(--good); }
+    .alert.error { background: #f4dfd6; color: var(--bad); }
+    .client-picker { padding: 14px 22px; border-bottom: 1px solid var(--rule); }
+    .client-picker label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+    .client-picker select { width: 100%; margin-top: 4px; padding: 8px 10px;
+      border: 1px solid var(--rule); background: var(--surface); border-radius: 6px;
+      font-family: inherit; font-size: 13px; }
+    .spinner { text-align: center; padding: 30px 0; color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="topbar">
+      <div><span class="logo"></span><span class="name">Райф</span></div>
+      <div class="sub">Облигации</div>
+    </div>
+
+    <a class="back-link" href="/">← На главную</a>
+
+    <div class="client-picker">
+      <label>Профиль</label>
+      <select id="client-select"></select>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Доступные облигации</div>
+      <div id="catalogue-area"><div class="spinner">Загружаем…</div></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Рекомендация</div>
+      <div id="rec-area"><div class="spinner">Загружаем…</div></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Мои облигации</div>
+      <div id="holdings-area"><div class="spinner">Загружаем…</div></div>
+    </div>
+
+    <div class="section" style="padding-bottom:40px">
+      <div class="section-title">Купить или продать</div>
+      <div class="form-row">
+        <label>Облигация</label>
+        <select id="order-bond"><option value="">— выберите —</option></select>
+      </div>
+      <div class="form-row">
+        <label>Количество</label>
+        <input id="order-qty" type="number" min="1" value="1" />
+      </div>
+      <div class="btn-row">
+        <button class="btn buy" id="btn-buy">Купить</button>
+        <button class="btn sell" id="btn-sell">Продать</button>
+      </div>
+      <div id="order-result"></div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    "use strict";
+    const fmt = new Intl.NumberFormat("ru-RU");
+    const sel = document.getElementById("client-select");
+    const catalogueArea = document.getElementById("catalogue-area");
+    const recArea = document.getElementById("rec-area");
+    const holdingsArea = document.getElementById("holdings-area");
+    const orderBond = document.getElementById("order-bond");
+    const orderQty = document.getElementById("order-qty");
+    const orderResult = document.getElementById("order-result");
+
+    async function loadClients() {
+      try {
+        const r = await fetch("/clients?limit=200");
+        const d = await r.json();
+        const items = (d.items || []).slice(0, 80);
+        sel.innerHTML = items.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+        if (items.length) onPickClient();
+      } catch(e) { console.error(e); }
+    }
+
+    function onPickClient() {
+      if (!sel.value) return;
+      loadRecommendation(sel.value);
+      loadHoldings(sel.value);
+    }
+    sel.addEventListener("change", onPickClient);
+
+    async function loadCatalogue() {
+      try {
+        const r = await fetch("/api/bonds/catalogue");
+        const d = await r.json();
+        const items = d.items || [];
+        if (!items.length) { catalogueArea.innerHTML = "<div class='spinner'>Нет данных</div>"; return; }
+        orderBond.innerHTML = `<option value="">— выберите —</option>` +
+          items.map(b => `<option value="${b.bond_id}">${b.bond_id} — ${b.coupon_pct}% — ${fmt.format(b.price_rub)} ₽</option>`).join("");
+        catalogueArea.innerHTML = `<table class="bonds-table">
+          <thead><tr><th>Выпуск</th><th class="num">Купон</th><th class="num">Цена, ₽</th></tr></thead>
+          <tbody>${items.map(b => {
+            const tag = b.kind === "government"
+              ? `<span class="tag gov">гособлигация</span>`
+              : `<span class="tag corp">корпоративная</span>`;
+            return `<tr>
+              <td><div class="bond-id">${b.bond_id}</div><div class="bond-issuer">${b.issuer}</div>${tag}</td>
+              <td class="num">${b.coupon_pct}%</td>
+              <td class="num">${fmt.format(b.price_rub)}</td>
+            </tr>`;
+          }).join("")}</tbody>
+        </table>`;
+      } catch(e) { catalogueArea.innerHTML = "<div class='spinner'>Не удалось загрузить</div>"; }
+    }
+
+    async function loadRecommendation(clientId) {
+      recArea.innerHTML = "<div class='spinner'>Загружаем…</div>";
+      try {
+        const r = await fetch(`/api/bonds/recommendation/${clientId}`);
+        const d = await r.json();
+        const rows = (d.recommendation || []).map(p =>
+          `<div class="rec-row"><span>${p.bond_id}</span><span>${p.allocation_pct}%</span></div>`
+        ).join("");
+        recArea.innerHTML = `<div class="rec-box"><div class="note">${d.note || ""}</div>${rows}</div>`;
+      } catch(e) { recArea.innerHTML = "<div class='spinner'>Не удалось загрузить</div>"; }
+    }
+
+    async function loadHoldings(clientId) {
+      holdingsArea.innerHTML = "<div class='spinner'>Загружаем…</div>";
+      try {
+        const r = await fetch(`/api/bonds/holdings/${clientId}`);
+        const d = await r.json();
+        const items = d.items || [];
+        if (!items.length) { holdingsArea.innerHTML = "<div class='spinner'>Облигаций пока нет</div>"; return; }
+        holdingsArea.innerHTML = items.map(h =>
+          `<div class="holding-row">
+            <span>${h.bond_id} × ${h.quantity}</span>
+            <span>ср. цена ${fmt.format(h.avg_price_rub)} ₽</span>
+          </div>`
+        ).join("");
+      } catch(e) { holdingsArea.innerHTML = "<div class='spinner'>Не удалось загрузить</div>"; }
+    }
+
+    async function placeOrder(direction) {
+      const clientId = sel.value;
+      const bondId = orderBond.value;
+      const quantity = parseInt(orderQty.value, 10);
+      if (!clientId || !bondId || !quantity || quantity < 1) {
+        orderResult.innerHTML = `<div class="alert error">Выберите облигацию и количество</div>`;
+        return;
+      }
+      orderResult.innerHTML = `<div class="alert ok" style="background:#f0ead0;color:var(--warn)">Отправляем заявку…</div>`;
+      try {
+        const r = await fetch("/api/bonds/orders", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({customer_id: clientId, bond_id: bondId, quantity, direction}),
+        });
+        const d = await r.json();
+        if (r.ok) {
+          const label = direction === "buy" ? "Куплено" : "Продано";
+          orderResult.innerHTML = `<div class="alert ok">${label}: ${bondId} × ${quantity}<br/>
+            Сумма: ${fmt.format(d.total_rub)} ₽<br/>
+            Баланс счёта: ${fmt.format(d.new_balance_rub)} ₽</div>`;
+          loadHoldings(clientId);
+        } else {
+          orderResult.innerHTML = `<div class="alert error">${d.detail || "ошибка"}</div>`;
+        }
+      } catch(e) {
+        orderResult.innerHTML = `<div class="alert error">Сервер не ответил</div>`;
+      }
+    }
+
+    document.getElementById("btn-buy").addEventListener("click", () => placeOrder("buy"));
+    document.getElementById("btn-sell").addEventListener("click", () => placeOrder("sell"));
+
+    loadClients();
+    loadCatalogue();
+  })();
+  </script>
+</body>
+</html>
