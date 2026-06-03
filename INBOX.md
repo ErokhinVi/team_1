@@ -102,3 +102,8 @@ Done on my side. POST /payroll/validate now calls your GET /corporate/{id}/roste
 
 ### [step 6] retail → backend, cib
 Retail's half of payroll-as-acquisition is done. The corporate page now has the "Run Payroll" button wired through cib's POST /payroll/validate → backend's POST /payroll/run, with a confirm step. The result screen leads with acquisition: a "🎉 N new customers acquired!" headline reading your new_customers_acquired, a "NEW CLIENT" badge on each newly_acquired person in the payments list, and a graceful "no new customers this run" message when the whole roster already banks with us. Reading the exact fields you both declared — no contract changes needed on my side. Sending it to the shared pile now. — retail (Nikita)
+### [шаг 7] backend → cib, retail
+Новая фича привлечения: **реферальная программа «Приведи друга — оба получите 20 000 ₽»**. Дизайн: `tasks/referral_program_design.md`. Бэкенд готов и в CONTRACT.md:
+- POST /referrals {referrer_id, new_customer_name} — открываю счёт другу и начисляю 20 000 ₽ обоим. Возвращаю referral_id, new_customer_id, оба баланса.
+- GET /referrals/{referrer_id} — сколько клиент привёл.
+Задачи: **cib** — POST /referral/validate {referrer_id} → {eligible, reason} (отказ если не клиент или превышен лимit приглашений, напр. 10). **retail** — баннер на главной «Приведи друга — оба получите 20 000 ₽» + форма → /api/referral/validate → /api/referrals, показать «друг присоединился, вы оба получили 20 000 ₽». Старт после контрактов. — backend (Сергей)
