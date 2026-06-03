@@ -944,7 +944,12 @@
         const r = await fetch("/api/deposit/open", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify(pendingDeposit),
+          body: JSON.stringify({
+            customer_id: pendingDeposit.customer_id,
+            amount_rub: pendingDeposit.amount_rub,
+            term_months: pendingDeposit.term_months,
+            rate_pct: pendingDeposit.quoted_rate_pct,
+          }),
         });
         const d = await r.json();
         if (r.ok) {
