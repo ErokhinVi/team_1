@@ -7,9 +7,11 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import random
 import string
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -46,6 +48,7 @@ _brokerage_orders: list[dict[str, Any]] = []
 _corporate_accounts: list[dict[str, Any]] = []
 _corporate_accounts_by_id: dict[str, dict[str, Any]] = {}
 _corporate_payments: list[dict[str, Any]] = []
+_loans: list[dict[str, Any]] = []
 
 MOCK_PRICES: dict[str, float] = {
     "SBER": 312.5,
@@ -492,4 +495,53 @@ async def run_payroll(payload: dict) -> dict:
         "total_paid_rub": total_payroll,
         "new_employer_balance_rub": employer["balance_rub"],
         "payments": payments,
+    }
+
+
+def _monthly_payment(amount: int, rate_pct: float, term_months: int) -> int:
+    r = rate_pct / 12 / 100
+    if r == 0:
+        return round(amount / term_months)
+    m = amount * r / (1 - (1 + r) ** (-term_months))
+    return round(m / 100) * 100
+
+
+@app.post("/loans")
+async def create_loan(payload: dict) -> dict:
+    customer_id = payload.get("customer_id")
+    amount_rub = int(payload.get("amount_rub") or 0)
+    term_months = int(payload.get("term_months") or 0)
+    rate_pct = float(payload.get("rate_pct") or 0)
+    if not customer_id or customer_id not in _clients_by_id:
+        raise HTTPException(status_code=404, detail="клиент не найден")
+    if amount_rub <= 0:
+        raise HTTPException(status_code=400, detail="сумма должна быть положительной")
+    if term_months <= 0:
+        raise HTTPException(status_code=400, detail="срок должен быть положительным")
+    if rate_pct <= 0:
+        raise HTTPException(status_code=400, detail="ставка должна быть положительной")
+    client = _clients_by_id[customer_id]
+    loan_id = f"loan-{uuid.uuid4().hex[:8]}"
+    monthly_payment_rub = _monthly_payment(amount_rub, rate_pct, term_months)
+    client["balance_rub"] = round(client["balance_rub"] + amount_rub, 2)
+    loan = {
+        "loan_id": loan_id,
+        "customer_id": customer_id,
+        "amount_rub": amount_rub,
+        "term_months": term_months,
+        "rate_pct": rate_pct,
+        "monthly_payment_rub": monthly_payment_rub,
+        "status": "active",
+        "created_at": datetime.now().replace(microsecond=0).isoformat(),
+    }
+    _loans.append(loan)
+    _save_clients()
+    return {
+        "loan_id": loan_id,
+        "customer_id": customer_id,
+        "amount_rub": amount_rub,
+        "term_months": term_months,
+        "rate_pct": rate_pct,
+        "monthly_payment_rub": monthly_payment_rub,
+        "new_balance_rub": int(client["balance_rub"]),
     }
