@@ -448,3 +448,46 @@ async def corporate_payment(payload: dict) -> dict:
         "new_balance_rub": sender["balance_rub"],
         "ts": now_iso,
     }
+
+
+@app.get("/corporate/{client_id}/employees")
+async def get_corporate_employees(client_id: str) -> dict:
+    if client_id not in _corporate_accounts_by_id:
+        raise HTTPException(status_code=404, detail=f"корпоративный счёт {client_id} не найден")
+    employees = [
+        {"id": c["id"], "name": c["name"], "income_rub": c["income_rub"], "balance_rub": c["balance_rub"]}
+        for c in _clients if c.get("employer_id") == client_id
+    ]
+    return {"total": len(employees), "items": employees}
+
+
+@app.post("/payroll/run")
+async def run_payroll(payload: dict) -> dict:
+    employer_id = payload.get("employer_id")
+    if not employer_id or employer_id not in _corporate_accounts_by_id:
+        raise HTTPException(status_code=400, detail="корпоративный счёт работодателя не найден")
+    employer = _corporate_accounts_by_id[employer_id]
+    employees = [c for c in _clients if c.get("employer_id") == employer_id]
+    if not employees:
+        raise HTTPException(status_code=400, detail="у этой компании нет сотрудников в банке")
+    total_payroll = sum(e["income_rub"] for e in employees)
+    if employer["balance_rub"] < total_payroll:
+        raise HTTPException(
+            status_code=400,
+            detail=f"недостаточно средств: нужно {total_payroll} ₽, на счёте {employer['balance_rub']} ₽",
+        )
+    payments = []
+    for emp in employees:
+        emp["balance_rub"] += emp["income_rub"]
+        payments.append({"employee_id": emp["id"], "name": emp["name"], "amount_rub": emp["income_rub"]})
+    employer["balance_rub"] -= total_payroll
+    _save_clients()
+    _save_corporate()
+    return {
+        "status": "ok",
+        "employer_id": employer_id,
+        "employees_paid": len(employees),
+        "total_paid_rub": total_payroll,
+        "new_employer_balance_rub": employer["balance_rub"],
+        "payments": payments,
+    }
