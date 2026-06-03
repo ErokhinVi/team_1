@@ -105,6 +105,16 @@ def _save_corporate() -> None:
         _save_jsonl(SEED_DIR / "corporate_payments.jsonl", _corporate_payments)
 
 
+def _save_loans() -> None:
+    if SEED_DIR:
+        _save_jsonl(SEED_DIR / "loans.jsonl", _loans)
+
+
+def _save_deposits() -> None:
+    if SEED_DIR:
+        _save_jsonl(SEED_DIR / "deposits.jsonl", _deposits)
+
+
 def _load_seed() -> None:
     if not SEED_DIR:
         return
@@ -122,6 +132,8 @@ def _load_seed() -> None:
     _corporate_accounts.extend(corps)
     _corporate_accounts_by_id.update({c["id"]: c for c in corps})
     _corporate_payments.extend(_load_jsonl(SEED_DIR / "corporate_payments.jsonl"))
+    _loans.extend(_load_jsonl(SEED_DIR / "loans.jsonl"))
+    _deposits.extend(_load_jsonl(SEED_DIR / "deposits.jsonl"))
 
 
 _load_seed()
@@ -552,6 +564,7 @@ async def create_loan(payload: dict) -> dict:
     }
     _loans.append(loan)
     _save_clients()
+    _save_loans()
     return {
         "loan_id": loan_id,
         "customer_id": customer_id,
@@ -600,6 +613,7 @@ async def create_deposit(payload: dict) -> dict:
     }
     _deposits.append(deposit)
     _save_clients()
+    _save_deposits()
     return {
         "deposit_id": deposit_id,
         "customer_id": customer_id,

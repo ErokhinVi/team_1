@@ -6,9 +6,28 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+import main
 from main import app
 
 client = TestClient(app)
+
+
+def simulate_restart():
+    """Wipe all in-memory state and reload it from disk, the way a fresh
+    process does on startup. Used to prove persistence survives a restart."""
+    main._clients.clear()
+    main._clients_by_id.clear()
+    main._transactions.clear()
+    main._credit_cards.clear()
+    main._credit_cards_by_id.clear()
+    main._brokerage_accounts.clear()
+    main._brokerage_orders.clear()
+    main._corporate_accounts.clear()
+    main._corporate_accounts_by_id.clear()
+    main._corporate_payments.clear()
+    main._loans.clear()
+    main._deposits.clear()
+    main._load_seed()
 
 
 # ---------------------------------------------------------------------------
@@ -466,3 +485,52 @@ def test_deposit_rates_by_term():
         })
         assert r.status_code == 200, f"Failed for term={term}"
         assert r.json()["rate_pct"] == rate, f"Wrong rate for term={term}"
+
+
+# ---------------------------------------------------------------------------
+# Persistence — records and balances survive a data-layer reload (restart)
+# ---------------------------------------------------------------------------
+
+def test_records_survive_restart():
+    """Create one of every kind of runtime record, then reload the data layer
+    from disk as a fresh process would, and confirm everything is still there."""
+    r = client.get("/clients?segment=private&limit=1")
+    cid = r.json()["items"][0]["id"]
+
+    card_id = client.post("/credit-cards", json={"customer_id": cid, "credit_limit": 70000}).json()["card_id"]
+    loan_id = client.post("/loans", json={
+        "customer_id": cid, "amount_rub": 100000, "term_months": 12, "rate_pct": 18.0
+    }).json()["loan_id"]
+    deposit_id = client.post("/deposits", json={
+        "customer_id": cid, "amount_rub": 50000, "term_months": 12
+    }).json()["deposit_id"]
+    order = client.post("/brokerage/orders", json={
+        "customer_id": cid, "ticker": "SBER", "quantity": 2, "direction": "buy"
+    }).json()
+    order_id = order["order_id"]
+
+    # Simulate the Render process restarting and reloading state from disk.
+    simulate_restart()
+
+    assert any(c["card_id"] == card_id for c in main._credit_cards), "credit card lost on restart"
+    assert any(l["loan_id"] == loan_id for l in main._loans), "loan lost on restart"
+    assert any(d["deposit_id"] == deposit_id for d in main._deposits), "deposit lost on restart"
+    assert any(o["order_id"] == order_id for o in main._brokerage_orders), "brokerage order lost on restart"
+    assert cid in main._brokerage_accounts, "brokerage account lost on restart"
+
+
+def test_balance_changes_survive_restart():
+    """A balance change from a loan disbursement must persist across a reload."""
+    r = client.get("/clients?segment=private&limit=1")
+    cid = r.json()["items"][0]["id"]
+    before = client.get(f"/clients/{cid}").json()["balance_rub"]
+
+    client.post("/loans", json={
+        "customer_id": cid, "amount_rub": 25000, "term_months": 12, "rate_pct": 18.0
+    })
+    expected = before + 25000
+
+    simulate_restart()
+
+    after = client.get(f"/clients/{cid}").json()["balance_rub"]
+    assert round(after) == round(expected), "balance change did not survive restart"
