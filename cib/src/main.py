@@ -63,10 +63,13 @@ async def credit_decision(req: CreditDecisionRequest) -> dict:
         return {"approved": False, "credit_limit_rub": 0, "rate_pct": None,
                 "reason": "Declined: history of overdue payments on record"}
 
-    limit = int(income_rub * 12 * 0.30)
+    segment = customer.get("segment", "mass")
+    limit_multiplier = 0.50 if segment == "premium" else 0.30
+    limit = int(income_rub * 12 * limit_multiplier)
 
-    # Rate: 19% base, up to 27% for high-risk customers
-    rate_pct = round(19.0 + risk_score * 8.0, 1)
+    # Rate: 19% base, up to 27% for high-risk customers; premium gets a 2% discount
+    rate_base = 17.0 if segment == "premium" else 19.0
+    rate_pct = round(rate_base + risk_score * 8.0, 1)
 
     return {"approved": True, "credit_limit_rub": limit, "rate_pct": rate_pct,
             "reason": f"Approved: income {income_rub} RUB/month, no overdue history; rate reflects individual risk profile"}
