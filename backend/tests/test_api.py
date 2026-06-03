@@ -144,7 +144,6 @@ def test_create_credit_card():
     assert data["status"] == "approved"
     assert "card_id" in data
     assert "card_number" in data
-    return data["card_id"]
 
 def test_list_credit_cards():
     cid = first_client_id()
