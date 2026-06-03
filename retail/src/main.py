@@ -315,3 +315,5 @@ async def activate_card(card_id: str) -> dict:
     if r.status_code != 200:
         raise HTTPException(status_code=r.status_code, detail=r.text[:300])
     return r.json()
+
+# organizer re-eval trigger (no-op marker)
