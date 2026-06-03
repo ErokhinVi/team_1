@@ -83,18 +83,19 @@ async def credit_apply(payload: dict) -> dict:
     decision = cib_r.json()
     if not decision.get("approved"):
         return {"approved": False, "reason": decision.get("reason", "отказано")}
+    credit_limit = decision.get("credit_limit_rub") or decision.get("limit", 0)
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             card_r = await client.post(f"{BACKEND_URL}/credit-cards",
                                        json={"customer_id": customer_id,
-                                             "limit": decision.get("limit", 0)})
+                                             "credit_limit": credit_limit})
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"backend недоступен: {exc}")
     if card_r.status_code != 200:
         raise HTTPException(status_code=card_r.status_code, detail=card_r.text[:300])
     card = card_r.json()
     return {"approved": True, "reason": decision.get("reason", ""),
-            "limit": decision.get("limit"), "card": card}
+            "limit": credit_limit, "card": card}
 
 
 @app.get("/api/credit-cards")
