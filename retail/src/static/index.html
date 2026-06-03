@@ -240,8 +240,12 @@
       <div style="font-size:22px">📈</div>
     </a>
 
-    <div style="margin:10px 22px 0;padding:10px 16px;background:var(--text);border-radius:10px;text-align:center;">
-      <div style="font-weight:700;font-size:15px;color:var(--raiff);letter-spacing:0.01em" data-i18n="banner_top">⭐ Самая крутая кредитная карта! ⭐</div>
+    <div id="loan-banner" style="margin:10px 22px 0;padding:14px 16px;background:#3a2a1a;border-radius:10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+      <div>
+        <div style="font-weight:600;font-size:14px;color:#fff" data-i18n="loan_banner_title">Потребительский кредит</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:2px" data-i18n="loan_banner_sub">Деньги на любые цели за минуту</div>
+      </div>
+      <div style="font-size:22px">💸</div>
     </div>
 
     <div style="margin:10px 22px 0;padding:14px 16px;background:var(--raiff);border-radius:10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;" id="credit-banner">
@@ -363,7 +367,8 @@
         profile_label:      "Профиль",
         tab_transfers:      "Переводы",
         tab_credit:         "Кредитная карта",
-        banner_top:         "⭐ Самая крутая кредитная карта! ⭐",
+        loan_banner_title:  "Потребительский кредит",
+        loan_banner_sub:    "Деньги на любые цели за минуту",
         banner_title:       "Кредитная карта",
         banner_sub:         "Бесплатно за 1 минуту",
         transfer_title:     "Перевести",
@@ -408,7 +413,8 @@
         profile_label:      "Profile",
         tab_transfers:      "Transfers",
         tab_credit:         "Credit Card",
-        banner_top:         "⭐ The best credit card! ⭐",
+        loan_banner_title:  "Personal loan",
+        loan_banner_sub:    "Cash for any purpose in a minute",
         banner_title:       "Credit Card",
         banner_sub:         "Free in 1 minute",
         transfer_title:     "Send money",
@@ -455,7 +461,8 @@
       profile_label:      "Profil",
       tab_transfers:      "Überweisungen",
       tab_credit:         "Kreditkarte",
-      banner_top:         "⭐ Die beste Kreditkarte! ⭐",
+      loan_banner_title:  "Privatkredit",
+      loan_banner_sub:    "Geld für jeden Zweck in einer Minute",
       banner_title:       "Kreditkarte",
       banner_sub:         "Kostenlos in 1 Minute",
       transfer_title:     "Geld senden",
@@ -994,6 +1001,12 @@
     document.getElementById("deposit-banner-btn").addEventListener("click", () => {
       const depositTab = document.querySelector('.tab[data-tab="deposit"]');
       if (depositTab) depositTab.click();
+    });
+
+    // баннер потребкредита открывает вкладку «Кредит наличными»
+    document.getElementById("loan-banner").addEventListener("click", () => {
+      const loanTab = document.querySelector('.tab[data-tab="loan"]');
+      if (loanTab) loanTab.click();
     });
 
     loadClients();
