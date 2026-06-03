@@ -183,6 +183,11 @@ async def brokerage_recommendation(customer_id: str) -> dict:
 
 @app.post("/api/brokerage/orders")
 async def brokerage_order(payload: dict) -> dict:
+    # Отсутствующий customer_id — это неверный запрос (400), а не «клиент не
+    # найден» (404). Валидируем на входе, как в /api/credit-apply: иначе пустое
+    # тело пробрасывалось в backend и возвращало 404, маскируя рабочую ручку.
+    if not payload.get("customer_id"):
+        raise HTTPException(status_code=400, detail="customer_id required")
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             r = await client.post(f"{BACKEND_URL}/brokerage/orders", json=payload)
