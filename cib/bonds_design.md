@@ -111,6 +111,13 @@ The bond prices used for execution should match CIB's catalogue numbers, so
 copy the same `price_rub` values (or expose them from a shared place).
 Update CONTRACT.md after.
 
+> ⚠️ PRICE AGREEMENT (lesson from the deposit bug): the customer sees CIB's
+> catalogue price before buying. If backend charges a different `price_rub`,
+> the customer is billed a different amount than they were shown. Backend MUST
+> use exactly these prices: OFZ-26240=980, OFZ-26244=995, SBER-001P=1010,
+> GAZP-002P=1005, LKOH-001=1000. If you ever change a price, change it in both
+> places in the same commit.
+
 ### retail — Nikita Patrakhin
 
 Add a "Облигации" (Bonds) screen, similar to the existing brokerage page.
