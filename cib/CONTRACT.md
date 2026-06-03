@@ -17,9 +17,16 @@
 ### GET /
 HTML с каталогом продуктов. Для человека, не для других блоков.
 
+### POST /credit-decision
+Credit card approval decision. Accepts JSON `{"customer_id": "<id>"}`.
+Calls backend for customer data and returns:
+`{"approved": bool, "credit_limit_rub": int, "reason": "..."}`.
+Approved when income > 0; limit = 30% of annual income (monthly income × 12 × 0.30).
+Returns 404 if customer not found.
+
 ## Кого я зову у соседей
 
-- backend: пока никого; появится, когда логика решения попросит данные клиента
+- backend: `GET /clients/{client_id}` — to fetch customer income for the credit decision
 - retail: я никого не зову у retail — это retail зовёт меня
 
 ## Где работает блок локально

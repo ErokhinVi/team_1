@@ -9,18 +9,24 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI
+import httpx
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 
 TEAM_NAME = os.environ.get("TEAM_NAME", "team")
 COMMIT = os.environ.get("RENDER_GIT_COMMIT", "local")
-BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8003").rstrip("/")
+BACKEND_URL = os.environ.get("BACKEND_URL", "https://raif-a-backend.onrender.com").rstrip("/")
 
-# Базовый каталог. Кредитный продукт добавляет владелец блока в рамках задачи.
 PRODUCTS = [
     {"id": "card-debit", "kind": "card", "name": "Дебетовая карта", "segment": "mass"},
     {"id": "deposit-base", "kind": "deposit", "name": "Срочный депозит", "rate_pct": 14.0},
+    {"id": "card-credit", "kind": "card", "name": "Кредитная карта", "segment": "mass"},
 ]
+
+
+class CreditDecisionRequest(BaseModel):
+    customer_id: str
 
 app = FastAPI(title="cib — корпоратив и бизнес-логика", version="1.0.0")
 
@@ -34,6 +40,24 @@ async def health() -> dict:
 @app.get("/products")
 async def products() -> dict:
     return {"total": len(PRODUCTS), "items": PRODUCTS}
+
+
+@app.post("/credit-decision")
+async def credit_decision(req: CreditDecisionRequest) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(f"{BACKEND_URL}/clients/{req.customer_id}")
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Backend unavailable")
+    customer = resp.json()
+    income_rub = customer.get("income_rub", 0)
+    if income_rub > 0:
+        limit = int(income_rub * 12 * 0.30)
+        return {"approved": True, "credit_limit_rub": limit,
+                "reason": f"Income confirmed at {income_rub} RUB/month; limit set to 30% of annual income"}
+    return {"approved": False, "credit_limit_rub": 0,
+            "reason": "No confirmed income on record"}
 
 
 @app.get("/", response_class=HTMLResponse)
