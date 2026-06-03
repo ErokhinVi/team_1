@@ -156,8 +156,9 @@ async def brokerage_suitability(req: SuitabilityRequest) -> dict:
                 "reason": "Premium customer: full instrument range available"}
 
     return {"suitable": True, "tier": "standard",
-            "allowed_instruments": ["bonds", "etf"],
-            "reason": "Standard customer: lower-risk instruments available (bonds and ETFs)"}
+            "allowed_instruments": ["stocks", "bonds", "etf"],
+            "allowed_tickers": ["SBER", "GAZP", "LKOH", "MGNT"],
+            "reason": "Standard customer: defensive stocks (SBER, GAZP, LKOH, MGNT), bonds and ETFs available"}
 
 
 @app.get("/", response_class=HTMLResponse)

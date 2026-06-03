@@ -39,7 +39,7 @@ Returns 404 if customer not found.
 Brokerage suitability check. Accepts JSON `{"customer_id": "<id>"}`.
 Returns `{"suitable": bool, "tier": "standard"|"premium"|null, "allowed_instruments": [...], "reason": "..."}`.
 Rules: declined if income < 30,000 RUB/month or has overdue history.
-Standard customers (mass segment): bonds and ETFs only.
+Standard customers (mass segment): defensive stocks (SBER, GAZP, LKOH, MGNT), bonds and ETFs. Response includes allowed_tickers list.
 Premium customers: full range — stocks, bonds, ETFs, structured products.
 Returns 404 if customer not found.
 
