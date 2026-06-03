@@ -33,6 +33,23 @@ Block links: retail → backend, retail → cib, cib → backend. A feature is
 done only when all three blocks of the team have done their part and
 connected.
 
+## INBOX — the team's shared channel
+
+There is one shared file at the repository root that **every block and every
+board member can read and write**: [`INBOX.md`](INBOX.md). It is the team's
+live message board — the one place the otherwise-isolated blocks can actually
+talk to each other.
+
+Use it for real-time coordination that doesn't belong in a `CONTRACT.md` yet:
+"I added field X", "backend, please expose endpoint Y", "your /credit-decision
+returns 500 on client Z", "deployed retail, check the end-to-end flow".
+
+Rule of thumb: **`CONTRACT.md` is the law at the seam between blocks; `INBOX.md`
+is the team chat.** Agree something in INBOX, then lock it into the relevant
+`CONTRACT.md`. Append your message to the bottom; never delete others' messages.
+Access to `INBOX.md` is granted to all blocks in `.claude/settings.json`
+(and the per-block isolation templates), so the block sandbox never blocks it.
+
 ## How the agent learns the block
 
 The participant's block comes from `.git/raif-workshop-info` — written by

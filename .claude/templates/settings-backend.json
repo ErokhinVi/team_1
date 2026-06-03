@@ -18,6 +18,12 @@
       "Write(.github/**)"
     ],
     "allow": [
+      "Bash(grep:INBOX.md)",
+      "Bash(tail:INBOX.md)",
+      "Bash(cat:INBOX.md)",
+      "Write(INBOX.md)",
+      "Edit(INBOX.md)",
+      "Read(INBOX.md)",
       "Edit(backend/**)",
       "Write(backend/**)",
       "Read(backend/**)",

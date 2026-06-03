@@ -15,6 +15,7 @@ default_permissions = "raif-cib"
 
 [permissions.raif-cib.filesystem.":workspace_roots"]
 "." = "read"
+"INBOX.md" = "write"   # общий командный INBOX (см. /INBOX.md)
 "cib" = "write"
 ".git" = "write"
 "retail" = "deny"

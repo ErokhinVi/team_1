@@ -15,6 +15,7 @@ default_permissions = "raif-backend"
 
 [permissions.raif-backend.filesystem.":workspace_roots"]
 "." = "read"
+"INBOX.md" = "write"   # общий командный INBOX (см. /INBOX.md)
 "backend" = "write"
 "seed" = "write"
 ".git" = "write"

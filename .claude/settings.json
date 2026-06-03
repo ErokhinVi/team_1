@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "_comment": "Командные (коммиченные) настройки Claude Code. Мёржатся с личным .claude/settings.local.json каждого участника (изоляция блока). Здесь — общий доступ к корневому INBOX.md: единственный общий файл, который агенты ВСЕХ блоков могут читать и дополнять. Deny на INBOX.md нигде нет, поэтому эти allow-правила открывают его всем без переустановки бутстрапа.",
+  "permissions": {
+    "allow": [
+      "Read(INBOX.md)",
+      "Edit(INBOX.md)",
+      "Write(INBOX.md)",
+      "Bash(cat:INBOX.md)",
+      "Bash(tail:INBOX.md)",
+      "Bash(grep:INBOX.md)"
+    ]
+  }
+}

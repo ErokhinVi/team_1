@@ -26,6 +26,7 @@ default_permissions = "raif-retail"
 # Чужая команда живёт в отдельном репозитории, её здесь нет в принципе.
 [permissions.raif-retail.filesystem.":workspace_roots"]
 "." = "read"
+"INBOX.md" = "write"   # общий командный INBOX (см. /INBOX.md)
 "retail" = "write"
 ".git" = "write"
 "cib" = "deny"

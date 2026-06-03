@@ -140,6 +140,14 @@ their `CONTRACT.md` — tell the user in plain language ("the neighbour hasn't
 declared that capability in their contract yet") and offer to do your half
 in the meantime.
 
+For live, day-to-day coordination between blocks there is a shared file at the
+repository root — `INBOX.md` — that every block can read and write (access is
+granted in `.claude/settings.json`). Use it as the team chat: ask a neighbour
+for an endpoint, announce a change, flag a broken response. The `CONTRACT.md`
+is the formal law at the seam; `INBOX.md` is the running conversation. When you
+need something from a neighbour or just changed something they rely on, offer to
+drop a note in `INBOX.md`. See `TEAM.md` for the message format.
+
 ## Git and the shared pile
 
 The team's three participants commit to one shared branch in this repo
