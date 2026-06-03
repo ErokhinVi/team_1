@@ -237,7 +237,7 @@ async def corporate_payment_auth(req: CorpPaymentAuthRequest) -> dict:
 async def payroll_validate(req: PayrollValidateRequest) -> dict:
     async with httpx.AsyncClient(timeout=10) as client:
         employer_resp, employees_resp = await asyncio.gather(
-            client.get(f"{BACKEND_URL}/clients/{req.employer_id}"),
+            client.get(f"{BACKEND_URL}/corporate/accounts/{req.employer_id}"),
             client.get(f"{BACKEND_URL}/corporate/{req.employer_id}/employees"),
         )
 
@@ -350,8 +350,6 @@ async def deposit_terms(req: DepositTermsRequest) -> dict:
         return decline("Minimum deposit term is 3 months")
     if req.term_months > 36:
         return decline("Maximum deposit term is 36 months")
-    if has_overdue:
-        return decline("Deposit unavailable: overdue payment history on record")
 
     rate_pct = 22.0 if segment in ("premium", "private") else 21.0 if segment == "mass_affluent" else 20.0
 
@@ -425,8 +423,12 @@ th{{background:#16181f;color:#888;font-weight:500}}
 <li><span class="method get">GET</span>/products — full product catalogue</li>
 <li><span class="method get">GET</span>/products/brokerage — tradeable stocks</li>
 <li><span class="method post">POST</span>/credit-decision — credit card approval (income + risk + segment)</li>
+<li><span class="method post">POST</span>/deposit/terms — personalised deposit offer by segment</li>
+<li><span class="method post">POST</span>/loan/decision — consumer loan decision with annuity calculation</li>
 <li><span class="method post">POST</span>/brokerage/suitability — investor suitability check</li>
 <li><span class="method get">GET</span>/brokerage/recommendation/{{customer_id}} — personalised portfolio</li>
+<li><span class="method post">POST</span>/corporate/payment-auth — corporate payment authorisation</li>
+<li><span class="method post">POST</span>/payroll/validate — payroll eligibility check</li>
 </ul>
 </div>
 </body></html>"""
