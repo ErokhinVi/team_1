@@ -25,6 +25,16 @@ Rules: declined if no income or if customer has overdue payment history.
 If approved: limit = 30% of annual income (50% for premium-segment customers); rate_pct between 19.0 and 27.0 based on risk score (17.0–25.0 for premium customers).
 Returns 404 if customer not found.
 
+### GET /products/brokerage
+List of available stocks for trading. Returns `{"total": int, "items": [{"ticker", "company", "price_rub"}]}`.
+Includes SBER, GAZP, LKOH, YNDX, MGNT with current mock prices in rubles.
+
+### GET /brokerage/recommendation/{customer_id}
+Personalised portfolio recommendation based on customer risk profile. Calls backend for customer data.
+Returns `{"customer_id", "risk_score", "portfolio": [{"ticker", "allocation_pct"}], "note"}`.
+Low risk score → more SBER and GAZP (defensive); high risk score → more YNDX (growth).
+Returns 404 if customer not found.
+
 ### POST /brokerage/suitability
 Brokerage suitability check. Accepts JSON `{"customer_id": "<id>"}`.
 Returns `{"suitable": bool, "tier": "standard"|"premium"|null, "allowed_instruments": [...], "reason": "..."}`.

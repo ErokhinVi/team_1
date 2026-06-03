@@ -81,6 +81,52 @@ async def credit_decision(req: CreditDecisionRequest) -> dict:
             "reason": f"Approved: income {income_rub} RUB/month, no overdue history; rate reflects individual risk profile"}
 
 
+STOCKS = [
+    {"ticker": "SBER", "company": "Сбербанк", "price_rub": 312.50},
+    {"ticker": "GAZP", "company": "Газпром", "price_rub": 163.20},
+    {"ticker": "LKOH", "company": "Лукойл", "price_rub": 7_450.00},
+    {"ticker": "YNDX", "company": "Яндекс", "price_rub": 4_120.00},
+    {"ticker": "MGNT", "company": "Магнит", "price_rub": 5_890.00},
+]
+
+
+@app.get("/products/brokerage")
+async def brokerage_products() -> dict:
+    return {"total": len(STOCKS), "items": STOCKS}
+
+
+@app.get("/brokerage/recommendation/{customer_id}")
+async def brokerage_recommendation(customer_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(f"{BACKEND_URL}/clients/{customer_id}")
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Backend unavailable")
+    customer = resp.json()
+    risk_score = customer.get("risk_score", 0.5)
+
+    # Low risk (score near 0) → defensive stocks; high risk (score near 1) → growth stocks
+    sber = round(30 - risk_score * 15, 1)
+    gazp = round(25 - risk_score * 10, 1)
+    lkoh = round(20.0, 1)
+    yndx = round(10 + risk_score * 20, 1)
+    mgnt = round(100 - sber - gazp - lkoh - yndx, 1)
+
+    return {
+        "customer_id": customer_id,
+        "risk_score": risk_score,
+        "portfolio": [
+            {"ticker": "SBER", "allocation_pct": sber},
+            {"ticker": "GAZP", "allocation_pct": gazp},
+            {"ticker": "LKOH", "allocation_pct": lkoh},
+            {"ticker": "YNDX", "allocation_pct": yndx},
+            {"ticker": "MGNT", "allocation_pct": mgnt},
+        ],
+        "note": "Allocation shifts from defensive (SBER, GAZP) to growth (YNDX) based on risk profile"
+    }
+
+
 @app.post("/brokerage/suitability")
 async def brokerage_suitability(req: SuitabilityRequest) -> dict:
     async with httpx.AsyncClient(timeout=10) as client:
