@@ -113,6 +113,7 @@
         <label>Количество</label>
         <input id="order-qty" type="number" min="1" value="1" />
       </div>
+      <div id="order-estimate" style="font-size:13px;color:var(--text-2);margin-bottom:12px;min-height:18px;"></div>
       <div class="btn-row">
         <button class="btn buy" id="btn-buy">Купить</button>
         <button class="btn sell" id="btn-sell">Продать</button>
@@ -132,6 +133,8 @@
     const orderBond = document.getElementById("order-bond");
     const orderQty = document.getElementById("order-qty");
     const orderResult = document.getElementById("order-result");
+    const orderEstimate = document.getElementById("order-estimate");
+    const bondPrices = {};  // bond_id -> цена из каталога cib (единственный источник цены)
 
     async function loadClients() {
       try {
@@ -156,8 +159,10 @@
         const d = await r.json();
         const items = d.items || [];
         if (!items.length) { catalogueArea.innerHTML = "<div class='spinner'>Нет данных</div>"; return; }
+        items.forEach(b => { bondPrices[b.bond_id] = b.price_rub; });
         orderBond.innerHTML = `<option value="">— выберите —</option>` +
           items.map(b => `<option value="${b.bond_id}">${b.bond_id} — ${b.coupon_pct}% — ${fmt.format(b.price_rub)} ₽</option>`).join("");
+        updateEstimate();
         catalogueArea.innerHTML = `<table class="bonds-table">
           <thead><tr><th>Выпуск</th><th class="num">Купон</th><th class="num">Цена, ₽</th></tr></thead>
           <tbody>${items.map(b => {
@@ -202,6 +207,15 @@
       } catch(e) { holdingsArea.innerHTML = "<div class='spinner'>Не удалось загрузить</div>"; }
     }
 
+    function updateEstimate() {
+      const price = bondPrices[orderBond.value];
+      const qty = parseInt(orderQty.value, 10);
+      if (!price || !qty || qty < 1) { orderEstimate.textContent = ""; return; }
+      orderEstimate.innerHTML = `Цена за штуку ${fmt.format(price)} ₽ · итого <strong>${fmt.format(price * qty)} ₽</strong>`;
+    }
+    orderBond.addEventListener("change", updateEstimate);
+    orderQty.addEventListener("input", updateEstimate);
+
     async function placeOrder(direction) {
       const clientId = sel.value;
       const bondId = orderBond.value;
@@ -220,9 +234,13 @@
         const d = await r.json();
         if (r.ok) {
           const label = direction === "buy" ? "Куплено" : "Продано";
+          const expected = bondPrices[bondId] ? bondPrices[bondId] * quantity : null;
+          const mismatch = (expected != null && d.total_rub != null && expected !== d.total_rub)
+            ? `<br/><span style="color:var(--warn);font-size:11px;">Внимание: списано ${fmt.format(d.total_rub)} ₽ вместо показанных ${fmt.format(expected)} ₽.</span>`
+            : "";
           orderResult.innerHTML = `<div class="alert ok">${label}: ${bondId} × ${quantity}<br/>
             Сумма: ${fmt.format(d.total_rub)} ₽<br/>
-            Баланс счёта: ${fmt.format(d.new_balance_rub)} ₽</div>`;
+            Баланс счёта: ${fmt.format(d.new_balance_rub)} ₽${mismatch}</div>`;
           loadHoldings(clientId);
         } else {
           orderResult.innerHTML = `<div class="alert error">${d.detail || "ошибка"}</div>`;
