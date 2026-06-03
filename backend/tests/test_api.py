@@ -28,6 +28,8 @@ def simulate_restart():
     main._loans.clear()
     main._deposits.clear()
     main._mortgages.clear()
+    main._bond_holdings.clear()
+    main._bond_orders.clear()
     main._load_seed()
 
 
@@ -562,6 +564,83 @@ def test_create_mortgage_invalid_loan_amount():
 
 
 # ---------------------------------------------------------------------------
+# Bonds
+# ---------------------------------------------------------------------------
+
+def test_bonds_holdings_empty_for_new_customer():
+    r = client.get("/clients?segment=private&limit=2")
+    cid = r.json()["items"][1]["id"]
+    r = client.get(f"/bonds/holdings/{cid}")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["customer_id"] == cid
+    assert "items" in data
+
+def test_bonds_holdings_not_found():
+    r = client.get("/bonds/holdings/bad-id")
+    assert r.status_code == 404
+
+def test_bonds_buy_debits_and_creates_holding():
+    r = client.get("/clients?segment=private&limit=1")
+    cid = r.json()["items"][0]["id"]
+    before = client.get(f"/clients/{cid}").json()["balance_rub"]
+    r = client.post("/bonds/orders", json={
+        "customer_id": cid, "bond_id": "OFZ-26240", "quantity": 10, "direction": "buy"
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "executed"
+    assert data["total_rub"] == 9800  # 10 × 980
+    after = client.get(f"/clients/{cid}").json()["balance_rub"]
+    assert round(before - after) == 9800
+    holdings = client.get(f"/bonds/holdings/{cid}").json()["items"]
+    assert any(h["bond_id"] == "OFZ-26240" and h["quantity"] >= 10 for h in holdings)
+
+def test_bonds_sell_credits_and_reduces_holding():
+    r = client.get("/clients?segment=private&limit=1")
+    cid = r.json()["items"][0]["id"]
+    client.post("/bonds/orders", json={
+        "customer_id": cid, "bond_id": "SBER-001P", "quantity": 5, "direction": "buy"
+    })
+    before = client.get(f"/clients/{cid}").json()["balance_rub"]
+    r = client.post("/bonds/orders", json={
+        "customer_id": cid, "bond_id": "SBER-001P", "quantity": 3, "direction": "sell"
+    })
+    assert r.status_code == 200
+    assert r.json()["total_rub"] == 3030  # 3 × 1010
+    after = client.get(f"/clients/{cid}").json()["balance_rub"]
+    assert round(after - before) == 3030
+
+def test_bonds_sell_more_than_held_rejected():
+    r = client.get("/clients?segment=private&limit=1")
+    cid = r.json()["items"][0]["id"]
+    r = client.post("/bonds/orders", json={
+        "customer_id": cid, "bond_id": "LKOH-001", "quantity": 999999, "direction": "sell"
+    })
+    assert r.status_code == 400
+
+def test_bonds_buy_insufficient_funds_rejected():
+    cid = first_client_id()
+    r = client.post("/bonds/orders", json={
+        "customer_id": cid, "bond_id": "GAZP-002P", "quantity": 99999999, "direction": "buy"
+    })
+    assert r.status_code == 400
+
+def test_bonds_unknown_bond_rejected():
+    cid = first_client_id()
+    r = client.post("/bonds/orders", json={
+        "customer_id": cid, "bond_id": "FAKE-001", "quantity": 1, "direction": "buy"
+    })
+    assert r.status_code == 400
+
+def test_bonds_order_customer_not_found():
+    r = client.post("/bonds/orders", json={
+        "customer_id": "bad-id", "bond_id": "OFZ-26240", "quantity": 1, "direction": "buy"
+    })
+    assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # Persistence — records and balances survive a data-layer reload (restart)
 # ---------------------------------------------------------------------------
 
@@ -587,12 +666,16 @@ def test_records_survive_restart():
         "down_payment_rub": 2_000_000, "loan_amount_rub": 8_000_000,
         "term_years": 20, "rate_pct": 12.5,
     }).json()["mortgage_id"]
+    client.post("/bonds/orders", json={
+        "customer_id": cid, "bond_id": "OFZ-26244", "quantity": 7, "direction": "buy"
+    })
 
     # Simulate the Render process restarting and reloading state from disk.
     simulate_restart()
 
     assert any(c["card_id"] == card_id for c in main._credit_cards), "credit card lost on restart"
     assert any(m["mortgage_id"] == mortgage_id for m in main._mortgages), "mortgage lost on restart"
+    assert cid in main._bond_holdings and "OFZ-26244" in main._bond_holdings[cid], "bond holding lost on restart"
     assert any(l["loan_id"] == loan_id for l in main._loans), "loan lost on restart"
     assert any(d["deposit_id"] == deposit_id for d in main._deposits), "deposit lost on restart"
     assert any(o["order_id"] == order_id for o in main._brokerage_orders), "brokerage order lost on restart"

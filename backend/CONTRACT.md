@@ -100,6 +100,17 @@ Seeded corporate ids имеют формат `corp-001`, `corp-002`, `corp-003`.
 Возвращает `{mortgage_id, customer_id, property_price_rub, down_payment_rub, loan_amount_rub, term_years, rate_pct, monthly_payment_rub, status, created_at}`.
 Ошибка `404` если клиент не найден, `400` если сумма/срок/ставка ≤ 0.
 
+### GET /bonds/holdings/{customer_id}
+Облигации, которыми владеет клиент. Возвращает `{customer_id, total, items: [{bond_id, quantity, avg_price_rub}]}`.
+Ошибка `404` если клиент не найден.
+
+### POST /bonds/orders
+Купить или продать облигации. Принимает JSON `{customer_id, bond_id, quantity, direction}` (`direction` = `buy`|`sell`).
+Доступные облигации (цена за штуку): `OFZ-26240`→980, `OFZ-26244`→995, `SBER-001P`→1010, `GAZP-002P`→1005, `LKOH-001`→1000 (совпадают с каталогом cib).
+Покупка списывает `quantity × price_rub` с банковского счёта и увеличивает позицию; продажа возвращает деньги и уменьшает позицию.
+Позиции сохраняются на диск (переживают перезапуск). Возвращает `{order_id, status, bond_id, direction, quantity, total_rub, new_balance_rub}`.
+Ошибка `404` если клиент не найден, `400` при нехватке средств, нехватке облигаций для продажи, или неверных параметрах.
+
 ### GET /corporate/{client_id}/employees
 Список сотрудников корпоративного клиента, у которых есть счёт в банке.
 Возвращает `{total, items: [{id, name, income_rub, balance_rub}]}`.

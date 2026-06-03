@@ -51,6 +51,9 @@ _corporate_payments: list[dict[str, Any]] = []
 _loans: list[dict[str, Any]] = []
 _deposits: list[dict[str, Any]] = []
 _mortgages: list[dict[str, Any]] = []
+# Облигации: customer_id -> bond_id -> {quantity, avg_price_rub}
+_bond_holdings: dict[str, dict[str, dict[str, Any]]] = {}
+_bond_orders: list[dict[str, Any]] = []
 
 MOCK_PRICES: dict[str, float] = {
     "SBER": 312.5,
@@ -58,6 +61,15 @@ MOCK_PRICES: dict[str, float] = {
     "LKOH": 7240.0,
     "YNDX": 4150.0,
     "MGNT": 5980.0,
+}
+
+# Цены облигаций совпадают с каталогом cib (см. cib/bonds_design.md).
+BOND_PRICES: dict[str, int] = {
+    "OFZ-26240": 980,
+    "OFZ-26244": 995,
+    "SBER-001P": 1010,
+    "GAZP-002P": 1005,
+    "LKOH-001": 1000,
 }
 
 
@@ -121,6 +133,18 @@ def _save_mortgages() -> None:
         _save_jsonl(SEED_DIR / "mortgages.jsonl", _mortgages)
 
 
+def _save_bonds() -> None:
+    if SEED_DIR:
+        flat = [
+            {"customer_id": cust, "bond_id": bid,
+             "quantity": h["quantity"], "avg_price_rub": h["avg_price_rub"]}
+            for cust, holdings in _bond_holdings.items()
+            for bid, h in holdings.items()
+        ]
+        _save_jsonl(SEED_DIR / "bond_holdings.jsonl", flat)
+        _save_jsonl(SEED_DIR / "bond_orders.jsonl", _bond_orders)
+
+
 def _load_seed() -> None:
     if not SEED_DIR:
         return
@@ -141,6 +165,11 @@ def _load_seed() -> None:
     _loans.extend(_load_jsonl(SEED_DIR / "loans.jsonl"))
     _deposits.extend(_load_jsonl(SEED_DIR / "deposits.jsonl"))
     _mortgages.extend(_load_jsonl(SEED_DIR / "mortgages.jsonl"))
+    for h in _load_jsonl(SEED_DIR / "bond_holdings.jsonl"):
+        _bond_holdings.setdefault(h["customer_id"], {})[h["bond_id"]] = {
+            "quantity": h["quantity"], "avg_price_rub": h["avg_price_rub"]
+        }
+    _bond_orders.extend(_load_jsonl(SEED_DIR / "bond_orders.jsonl"))
 
 
 _load_seed()
@@ -667,3 +696,81 @@ async def create_mortgage(payload: dict) -> dict:
     _mortgages.append(mortgage)
     _save_mortgages()
     return mortgage
+
+
+@app.get("/bonds/holdings/{customer_id}")
+async def get_bond_holdings(customer_id: str) -> dict:
+    if customer_id not in _clients_by_id:
+        raise HTTPException(status_code=404, detail="клиент не найден")
+    holdings = _bond_holdings.get(customer_id, {})
+    items = [
+        {"bond_id": bid, "quantity": h["quantity"], "avg_price_rub": h["avg_price_rub"]}
+        for bid, h in holdings.items()
+    ]
+    return {"customer_id": customer_id, "total": len(items), "items": items}
+
+
+@app.post("/bonds/orders")
+async def create_bond_order(payload: dict) -> dict:
+    customer_id = payload.get("customer_id")
+    bond_id = payload.get("bond_id")
+    quantity = int(payload.get("quantity") or 0)
+    direction = payload.get("direction")
+    if not customer_id or customer_id not in _clients_by_id:
+        raise HTTPException(status_code=404, detail="клиент не найден")
+    if bond_id not in BOND_PRICES:
+        raise HTTPException(status_code=400, detail=f"неизвестная облигация; доступны: {', '.join(BOND_PRICES)}")
+    if quantity <= 0:
+        raise HTTPException(status_code=400, detail="количество должно быть положительным")
+    if direction not in ("buy", "sell"):
+        raise HTTPException(status_code=400, detail="direction должен быть 'buy' или 'sell'")
+    price = BOND_PRICES[bond_id]
+    total_rub = price * quantity
+    client = _clients_by_id[customer_id]
+    holdings = _bond_holdings.setdefault(customer_id, {})
+    if direction == "buy":
+        if client["balance_rub"] < total_rub:
+            raise HTTPException(status_code=400, detail=f"недостаточно средств: на счёте {client['balance_rub']} ₽")
+        client["balance_rub"] = round(client["balance_rub"] - total_rub, 2)
+        held = holdings.get(bond_id)
+        if held:
+            # средневзвешенная цена покупки
+            old_qty, old_avg = held["quantity"], held["avg_price_rub"]
+            new_qty = old_qty + quantity
+            held["avg_price_rub"] = round((old_qty * old_avg + quantity * price) / new_qty, 2)
+            held["quantity"] = new_qty
+        else:
+            holdings[bond_id] = {"quantity": quantity, "avg_price_rub": float(price)}
+    else:  # sell
+        held = holdings.get(bond_id)
+        if not held or held["quantity"] < quantity:
+            owned = held["quantity"] if held else 0
+            raise HTTPException(status_code=400, detail=f"недостаточно облигаций для продажи: в наличии {owned}")
+        held["quantity"] -= quantity
+        if held["quantity"] == 0:
+            del holdings[bond_id]
+        client["balance_rub"] = round(client["balance_rub"] + total_rub, 2)
+    order_id = f"bord-{len(_bond_orders) + 1:06d}"
+    order = {
+        "order_id": order_id,
+        "customer_id": customer_id,
+        "bond_id": bond_id,
+        "direction": direction,
+        "quantity": quantity,
+        "price_rub": price,
+        "total_rub": total_rub,
+        "status": "executed",
+        "ts": datetime.now().replace(microsecond=0).isoformat(),
+    }
+    _bond_orders.append(order)
+    _save_clients()
+    _save_bonds()
+    return {
+        "order_id": order_id,
+        "status": "executed",
+        "bond_id": bond_id,
+        "direction": direction,
+        "quantity": quantity,
+        "total_rub": total_rub,
+        "new_balance_rub": int(client["balance_rub"]),
+    }
