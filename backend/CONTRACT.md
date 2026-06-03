@@ -117,11 +117,16 @@ Seeded corporate ids имеют формат `corp-001`, `corp-002`, `corp-003`.
 `income_rub` — месячная зарплата сотрудника.
 Валидный пример: `GET /corporate/corp-001/employees`.
 
+### GET /corporate/{client_id}/roster
+Полный ростер сотрудников компании, включая ещё-не-клиентов банка (канал привлечения).
+Возвращает `{total, items: [{name, income_rub, client_id}]}`. `client_id` = `null` — сотрудник ещё не наш клиент.
+Ошибка `404` если компания не найдена. Пример: `GET /corporate/corp-001/roster`.
+
 ### POST /payroll/run
-Выплата зарплаты всем сотрудникам компании. Принимает JSON `{employer_id}`.
-Списывает сумму всех зарплат со счёта компании и зачисляет каждому сотруднику его `income_rub`.
-Возвращает `{status, employer_id, employees_paid, total_paid_rub, new_employer_balance_rub, payments: [{employee_id, name, amount_rub}]}`.
-Ошибка `400` если компания не найдена, нет сотрудников, или недостаточно средств.
+Зарплатный проект как канал привлечения. Принимает JSON `{employer_id}`.
+Проходит по всему ростеру компании: тем, у кого уже есть счёт — зачисляет зарплату; тем, кто ещё не клиент — **открывает счёт** (сегмент `mass`, привязка к работодателю) и зачисляет зарплату. Списывает суммарный фонд оплаты со счёта компании.
+Возвращает `{status, employer_id, employees_paid, new_customers_acquired, total_paid_rub, new_employer_balance_rub, payments: [{employee_id, name, amount_rub, newly_acquired}]}`.
+Новые счета сохраняются на диск (переживают перезапуск). Ошибка `400` если компания не найдена, нет ростера, или недостаточно средств.
 Валидный пример: `{"employer_id": "corp-001"}`.
 
 ### POST /corporate/payments

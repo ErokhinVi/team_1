@@ -30,6 +30,7 @@ def simulate_restart():
     main._mortgages.clear()
     main._bond_holdings.clear()
     main._bond_orders.clear()
+    main._company_roster.clear()
     main._load_seed()
 
 
@@ -369,6 +370,19 @@ def test_get_employees_not_found():
 # Payroll
 # ---------------------------------------------------------------------------
 
+def test_get_roster_includes_prospects():
+    corp_id = first_corporate_id()
+    r = client.get(f"/corporate/{corp_id}/roster")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) > 0
+    # roster must include people who are not yet customers (client_id is None)
+    assert any(p["client_id"] is None for p in items)
+
+def test_get_roster_not_found():
+    r = client.get("/corporate/corp-999/roster")
+    assert r.status_code == 404
+
 def test_payroll_run():
     corp_id = first_corporate_id()
     r = client.post("/payroll/run", json={"employer_id": corp_id})
@@ -378,6 +392,27 @@ def test_payroll_run():
     assert data["employees_paid"] >= 4
     assert data["total_paid_rub"] > 0
     assert len(data["payments"]) == data["employees_paid"]
+    assert "new_customers_acquired" in data
+
+def test_payroll_acquires_new_customers():
+    """First run on a company opens accounts for its prospects (acquisition)."""
+    # find a company whose roster still has prospects
+    corp_id = None
+    for c in client.get("/corporate/accounts").json()["items"]:
+        roster = client.get(f"/corporate/{c['id']}/roster").json()["items"]
+        if any(p["client_id"] is None for p in roster):
+            corp_id = c["id"]; break
+    assert corp_id, "no company with prospects to acquire"
+
+    clients_before = client.get("/clients?limit=500").json()["total"]
+    r = client.post("/payroll/run", json={"employer_id": corp_id}).json()
+    assert r["new_customers_acquired"] > 0
+    clients_after = client.get("/clients?limit=500").json()["total"]
+    assert clients_after == clients_before + r["new_customers_acquired"]
+
+    # running again acquires nobody new — prospects are now customers
+    r2 = client.post("/payroll/run", json={"employer_id": corp_id}).json()
+    assert r2["new_customers_acquired"] == 0
 
 def test_payroll_not_found():
     r = client.post("/payroll/run", json={"employer_id": "corp-999"})

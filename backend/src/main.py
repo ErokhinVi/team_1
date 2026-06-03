@@ -54,6 +54,8 @@ _mortgages: list[dict[str, Any]] = []
 # Облигации: customer_id -> bond_id -> {quantity, avg_price_rub}
 _bond_holdings: dict[str, dict[str, dict[str, Any]]] = {}
 _bond_orders: list[dict[str, Any]] = []
+# Ростер сотрудников компаний (включая ещё-не-клиентов): для зарплатного привлечения
+_company_roster: list[dict[str, Any]] = []
 
 MOCK_PRICES: dict[str, float] = {
     "SBER": 312.5,
@@ -133,6 +135,11 @@ def _save_mortgages() -> None:
         _save_jsonl(SEED_DIR / "mortgages.jsonl", _mortgages)
 
 
+def _save_roster() -> None:
+    if SEED_DIR:
+        _save_jsonl(SEED_DIR / "company_roster.jsonl", _company_roster)
+
+
 def _save_bonds() -> None:
     if SEED_DIR:
         flat = [
@@ -170,6 +177,7 @@ def _load_seed() -> None:
             "quantity": h["quantity"], "avg_price_rub": h["avg_price_rub"]
         }
     _bond_orders.extend(_load_jsonl(SEED_DIR / "bond_orders.jsonl"))
+    _company_roster.extend(_load_jsonl(SEED_DIR / "company_roster.jsonl"))
 
 
 _load_seed()
@@ -515,32 +523,76 @@ async def get_corporate_employees(client_id: str) -> dict:
     return {"total": len(employees), "items": employees}
 
 
+@app.get("/corporate/{client_id}/roster")
+async def get_corporate_roster(client_id: str) -> dict:
+    if client_id not in _corporate_accounts_by_id:
+        raise HTTPException(status_code=404, detail=f"корпоративный счёт {client_id} не найден")
+    items = [
+        {"name": r["name"], "income_rub": r["income_rub"], "client_id": r.get("client_id")}
+        for r in _company_roster if r["employer_id"] == client_id
+    ]
+    return {"total": len(items), "items": items}
+
+
+def _next_client_id() -> str:
+    n = 1
+    while f"c-{90000 + n:05d}" in _clients_by_id:
+        n += 1
+    return f"c-{90000 + n:05d}"
+
+
 @app.post("/payroll/run")
 async def run_payroll(payload: dict) -> dict:
     employer_id = payload.get("employer_id")
     if not employer_id or employer_id not in _corporate_accounts_by_id:
         raise HTTPException(status_code=400, detail="корпоративный счёт работодателя не найден")
     employer = _corporate_accounts_by_id[employer_id]
-    employees = [c for c in _clients if c.get("employer_id") == employer_id]
-    if not employees:
-        raise HTTPException(status_code=400, detail="у этой компании нет сотрудников в банке")
-    total_payroll = sum(e["income_rub"] for e in employees)
+    roster = [r for r in _company_roster if r["employer_id"] == employer_id]
+    if not roster:
+        raise HTTPException(status_code=400, detail="у этой компании нет ростера сотрудников")
+    total_payroll = sum(r["income_rub"] for r in roster)
     if employer["balance_rub"] < total_payroll:
         raise HTTPException(
             status_code=400,
             detail=f"недостаточно средств: нужно {total_payroll} ₽, на счёте {employer['balance_rub']} ₽",
         )
     payments = []
-    for emp in employees:
-        emp["balance_rub"] += emp["income_rub"]
-        payments.append({"employee_id": emp["id"], "name": emp["name"], "amount_rub": emp["income_rub"]})
+    acquired = 0
+    for r in roster:
+        client = _clients_by_id.get(r.get("client_id")) if r.get("client_id") else None
+        newly_acquired = client is None
+        if newly_acquired:
+            # Сотрудник ещё не наш клиент — открываем счёт (привлечение).
+            new_id = _next_client_id()
+            client = {
+                "id": new_id,
+                "name": r["name"],
+                "segment": "mass",
+                "income_rub": r["income_rub"],
+                "balance_rub": 0,
+                "products": [],
+                "risk_score": 0.3,
+                "has_overdue_history": False,
+                "employer_id": employer_id,
+                "joined_at": datetime.now().date().isoformat(),
+                "acquired_via": "payroll",
+            }
+            _clients.append(client)
+            _clients_by_id[new_id] = client
+            r["client_id"] = new_id  # сотрудник теперь привязан к счёту
+            acquired += 1
+        client["balance_rub"] += r["income_rub"]
+        payments.append({"employee_id": client["id"], "name": client["name"],
+                         "amount_rub": r["income_rub"], "newly_acquired": newly_acquired})
     employer["balance_rub"] -= total_payroll
     _save_clients()
     _save_corporate()
+    _save_roster()
     return {
         "status": "ok",
         "employer_id": employer_id,
-        "employees_paid": len(employees),
+        "employees_paid": len(roster),
+        "new_customers_acquired": acquired,
         "total_paid_rub": total_payroll,
         "new_employer_balance_rub": employer["balance_rub"],
         "payments": payments,
