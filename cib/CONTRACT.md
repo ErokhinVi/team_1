@@ -71,6 +71,16 @@ Rate by segment — mass/sme: 18–25%; mass_affluent: 15–22%; premium/private
 Monthly payment uses standard annuity formula, rounded to nearest 100 RUB.
 Returns 404 if customer not found.
 
+### POST /mortgage/decision
+Mortgage (home loan) decision. Accepts JSON `{"customer_id": "<id>", "property_price_rub": int, "down_payment_rub": int, "term_years": int}`.
+Returns `{approved, reason, loan_amount_rub, property_price_rub, down_payment_rub, term_years, rate_pct, monthly_payment_rub}`.
+Rules (in order): loan_amount = price − down payment, declined if ≤ 0; term must be 10/15/20/25/30 years;
+no overdue history; down payment ≥ 15% of price; loan ≤ 8× annual income; monthly payment ≤ 50% of monthly income.
+Rate by segment (cheaper than consumer loans — property is collateral): mass/sme 14–17%; mass_affluent 12–15%; premium/private 9–13% (adjusted by risk score).
+Monthly payment uses the standard annuity formula over term_years×12 months, rounded to nearest 100 RUB.
+Retail must forward this `rate_pct` to backend `POST /mortgages` so the registered rate matches the quoted one.
+Returns 404 if customer not found.
+
 ### POST /payroll/validate
 Payroll eligibility check for a corporate employer. Accepts JSON `{"employer_id": "<id>"}`.
 Calls backend `GET /corporate/accounts/{employer_id}` for employer data and

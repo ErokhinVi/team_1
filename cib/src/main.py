@@ -56,6 +56,13 @@ class LoanDecisionRequest(BaseModel):
     term_months: int
 
 
+class MortgageDecisionRequest(BaseModel):
+    customer_id: str
+    property_price_rub: int
+    down_payment_rub: int
+    term_years: int
+
+
 class DepositTermsRequest(BaseModel):
     customer_id: str
     amount_rub: int
@@ -378,6 +385,76 @@ async def loan_decision(req: LoanDecisionRequest) -> dict:
             "rate_pct": rate_pct, "monthly_payment_rub": monthly_payment_rub}
 
 
+@app.post("/mortgage/decision")
+async def mortgage_decision(req: MortgageDecisionRequest) -> dict:
+    loan_amount_rub = req.property_price_rub - req.down_payment_rub
+
+    def decline(reason: str) -> dict:
+        return {"approved": False, "reason": reason,
+                "loan_amount_rub": loan_amount_rub,
+                "property_price_rub": req.property_price_rub,
+                "down_payment_rub": req.down_payment_rub,
+                "term_years": req.term_years,
+                "rate_pct": None, "monthly_payment_rub": None}
+
+    # Loan must be positive
+    if loan_amount_rub <= 0:
+        return decline("Declined: down payment covers the whole price — no mortgage needed")
+
+    # Valid terms only
+    if req.term_years not in (10, 15, 20, 25, 30):
+        return decline("Declined: term must be 10, 15, 20, 25, or 30 years")
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(f"{BACKEND_URL}/clients/{req.customer_id}")
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Backend unavailable")
+
+    customer = resp.json()
+    income_rub = customer.get("income_rub", 0)
+    has_overdue = customer.get("has_overdue_history", False)
+    risk_score = customer.get("risk_score", 0.5)
+    segment = customer.get("segment", "mass")
+
+    if has_overdue:
+        return decline("Declined: history of overdue payments on record")
+
+    # Minimum down payment is 15% of property price
+    if req.down_payment_rub < req.property_price_rub * 0.15:
+        min_down = int(req.property_price_rub * 0.15)
+        return decline(f"Declined: minimum down payment is 15% ({min_down:,.0f} RUB)")
+
+    # Affordability: loan must not exceed 8× annual income
+    if loan_amount_rub > income_rub * 12 * 8:
+        max_loan = int(income_rub * 12 * 8)
+        return decline(f"Declined: loan amount exceeds maximum allowed ({max_loan:,.0f} RUB)")
+
+    # Rate by segment — mortgages are cheaper than consumer loans (property is collateral)
+    if segment in ("premium", "private"):
+        rate_pct = round(9.0 + risk_score * 4.0, 1)
+    elif segment == "mass_affluent":
+        rate_pct = round(12.0 + risk_score * 3.0, 1)
+    else:
+        rate_pct = round(14.0 + risk_score * 3.0, 1)
+
+    r = rate_pct / 12 / 100
+    n = req.term_years * 12
+    monthly = loan_amount_rub * r / (1 - (1 + r) ** (-n))
+    monthly_payment_rub = int(round(monthly / 100) * 100)
+
+    if monthly_payment_rub > income_rub * 0.5:
+        return decline(f"Declined: monthly payment {monthly_payment_rub:,.0f} RUB exceeds 50% of monthly income ({income_rub:,.0f} RUB)")
+
+    return {"approved": True, "reason": "Approved: income, down payment and credit history checks passed",
+            "loan_amount_rub": loan_amount_rub,
+            "property_price_rub": req.property_price_rub,
+            "down_payment_rub": req.down_payment_rub,
+            "term_years": req.term_years,
+            "rate_pct": rate_pct, "monthly_payment_rub": monthly_payment_rub}
+
+
 @app.post("/deposit/terms")
 async def deposit_terms(req: DepositTermsRequest) -> dict:
     async with httpx.AsyncClient(timeout=10) as client:
@@ -479,6 +556,7 @@ th{{background:#16181f;color:#888;font-weight:500}}
 <li><span class="method post">POST</span>/credit-decision — credit card approval (income + risk + segment)</li>
 <li><span class="method post">POST</span>/deposit/terms — personalised deposit offer by segment</li>
 <li><span class="method post">POST</span>/loan/decision — consumer loan decision with annuity calculation</li>
+<li><span class="method post">POST</span>/mortgage/decision — mortgage decision (collateral-based rate)</li>
 <li><span class="method post">POST</span>/brokerage/suitability — investor suitability check</li>
 <li><span class="method get">GET</span>/brokerage/recommendation/{{customer_id}} — personalised portfolio</li>
 <li><span class="method get">GET</span>/products/bonds — bond catalogue (government & corporate)</li>
