@@ -479,7 +479,7 @@
           </option>`
         ).join("");
         creditClientSel.innerHTML = items.map(c =>
-          `<option value="${c.id}" data-income="${c.income_rub || 0}" data-overdue="${c.has_overdue_history || false}">${c.name}</option>`
+          `<option value="${c.id}" data-income="${c.income_rub || 0}" data-overdue="${c.has_overdue_history || false}" data-payroll="${c.employer_id ? "true" : "false"}">${c.name}</option>`
         ).join("");
         showPreApproval();
         if (items.length) onPickClient();
@@ -610,7 +610,13 @@
       const t = T[lang];
       const income = +opt.dataset.income || 0;
       const overdue = opt.dataset.overdue === "true";
-      if (overdue) {
+      const isPayroll = opt.dataset.payroll === "true";
+      if (isPayroll) {
+        preApprovalMsg.innerHTML = `<div style="margin-bottom:12px;padding:12px 14px;border-radius:8px;background:var(--raiff);color:var(--text);">
+          <div style="font-weight:700;font-size:14px;">🎁 Бесплатная карта для зарплатных клиентов</div>
+          <div style="font-size:12px;margin-top:4px;opacity:0.75;">Вы получаете зарплату в Райф — кредитная карта для вас бесплатно и гарантированно.</div>
+        </div>`;
+      } else if (overdue) {
         preApprovalMsg.innerHTML = `<div class="alert info" style="margin-bottom:12px">${t.preapproval_overdue}</div>`;
       } else if (income > 0) {
         const limit = Math.round(income * 12 * 0.30);
@@ -684,8 +690,10 @@
         });
         const d = await r.json();
         const t = T[lang];
+        const isPayroll = (creditClientSel.selectedOptions[0] || {}).dataset?.payroll === "true";
         if (r.ok && d.approved) {
-          applyResult.innerHTML = `<div class="alert ok">${t.approved(fmt.format(d.limit), d.rate_pct, d.reason)}</div>`;
+          const payrollNote = isPayroll ? `<br/><strong>🎁 Зарплатный клиент — карта бесплатно</strong>` : "";
+          applyResult.innerHTML = `<div class="alert ok">${t.approved(fmt.format(d.limit), d.rate_pct, d.reason)}${payrollNote}</div>`;
           loadCards(opt.value);
         } else if (r.ok) {
           applyResult.innerHTML = `<div class="alert error">${t.declined(d.reason)}</div>`;
