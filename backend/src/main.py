@@ -305,7 +305,9 @@ async def create_brokerage_order(payload: dict) -> dict:
     ticker = (payload.get("ticker") or "").upper()
     quantity = int(payload.get("quantity") or 0)
     direction = payload.get("direction")
-    if not customer_id or customer_id not in _clients_by_id:
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="customer_id обязателен")
+    if customer_id not in _clients_by_id:
         raise HTTPException(status_code=404, detail="клиент не найден")
     if ticker not in MOCK_PRICES:
         raise HTTPException(status_code=400, detail=f"неизвестный тикер; доступны: {', '.join(MOCK_PRICES)}")
