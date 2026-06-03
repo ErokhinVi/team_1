@@ -1,0 +1,1 @@
+{"payment_id": "cpay-000001", "from_account_id": "corp-001", "from_name": "ООО «СтройГрупп»", "to_account_id": "corp-002", "to_name": "АО «ТехноЛогис»", "amount_rub": 1000, "purpose": "Test payment", "ts": "2026-06-03T12:58:49"}
