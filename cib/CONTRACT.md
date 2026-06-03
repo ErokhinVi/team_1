@@ -73,7 +73,7 @@ Example request with a real seeded employer: `{"employer_id": "corp-001"}`.
 ### POST /corporate/payment-auth
 Corporate payment authorisation. Accepts JSON:
 `{"corporate_client_id": "<id>", "amount_rub": float, "counterparty": "<name>", "purpose": "<optional>"}`.
-Checks: sufficient balance, no overdue obligations, large payments (>5M RUB) require premium segment.
+Checks: sufficient balance; large payments (>5M RUB) are declined only when the amount also exceeds the company's monthly turnover (manual review needed).
 Returns `{"approved": bool, "reason": "...", "amount_rub"?, "counterparty"?}`.
 Returns 404 if client not found.
 Example request with real seeded corporate account ids:
@@ -101,9 +101,10 @@ A corporate client object must contain at minimum:
 Every corporate payment goes through `POST /corporate/payment-auth` before backend executes it.
 Rules applied in order:
 1. Decline if `amount_rub > balance_rub` (insufficient funds)
-2. Decline if backend returns `has_overdue_history: true` (overdue obligations)
-3. Decline if `amount_rub > 5,000,000` and backend segment is not `premium`
-4. Otherwise approve
+2. Decline if `amount_rub > 5,000,000` and `amount_rub > monthly_turnover_rub` (large payment beyond turnover → manual review)
+3. Otherwise approve
+
+Note: backend's corporate accounts carry `id, name, industry, balance_rub, monthly_turnover_rub, opened_at` — they do not carry a `segment` or `has_overdue_history` field, so authorisation relies on balance and turnover only.
 
 ### Integration flow
 1. Retail fetches corporate account balance from backend `GET /corporate/accounts/{corp_id}`
