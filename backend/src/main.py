@@ -65,6 +65,33 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     return out
 
 
+def _save_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
+    with path.open("w", encoding="utf-8") as f:
+        for r in records:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+
+def _save_clients() -> None:
+    if SEED_DIR:
+        _save_jsonl(SEED_DIR / "clients.jsonl", _clients)
+
+
+def _save_transactions() -> None:
+    if SEED_DIR:
+        _save_jsonl(SEED_DIR / "transactions.jsonl", _transactions)
+
+
+def _save_credit_cards() -> None:
+    if SEED_DIR:
+        _save_jsonl(SEED_DIR / "credit_cards.jsonl", _credit_cards)
+
+
+def _save_brokerage() -> None:
+    if SEED_DIR:
+        _save_jsonl(SEED_DIR / "brokerage_accounts.jsonl", list(_brokerage_accounts.values()))
+        _save_jsonl(SEED_DIR / "brokerage_orders.jsonl", _brokerage_orders)
+
+
 def _load_seed() -> None:
     if not SEED_DIR:
         return
@@ -72,6 +99,12 @@ def _load_seed() -> None:
     _clients.extend(clients)
     _clients_by_id.update({c["id"]: c for c in clients})
     _transactions.extend(_load_jsonl(SEED_DIR / "transactions.jsonl"))
+    for card in _load_jsonl(SEED_DIR / "credit_cards.jsonl"):
+        _credit_cards.append(card)
+        _credit_cards_by_id[card["card_id"]] = card
+    for acc in _load_jsonl(SEED_DIR / "brokerage_accounts.jsonl"):
+        _brokerage_accounts[acc["customer_id"]] = acc
+    _brokerage_orders.extend(_load_jsonl(SEED_DIR / "brokerage_orders.jsonl"))
 
 
 _load_seed()
@@ -166,6 +199,8 @@ async def api_transfer(payload: dict) -> dict:
         kind, label = "internal", receiver["name"]
     else:
         kind, label = "external", to_query
+    _save_clients()
+    _save_transactions()
     return {
         "status": "ok", "kind": kind, "amount_rub": amount, "to": label,
         "from_client_id": from_id, "new_balance_rub": sender["balance_rub"],
@@ -198,6 +233,7 @@ async def create_credit_card(payload: dict) -> dict:
     }
     _credit_cards.append(card)
     _credit_cards_by_id[card_id] = card
+    _save_credit_cards()
     return {"card_id": card["card_id"], "card_number": card["card_number"], "status": card["status"]}
 
 
@@ -217,6 +253,7 @@ async def activate_credit_card(card_id: str) -> dict:
     if card["status"] != "approved":
         raise HTTPException(status_code=400, detail=f"карту нельзя активировать: статус '{card['status']}'")
     card["status"] = "active"
+    _save_credit_cards()
     return {"card_id": card_id, "status": card["status"]}
 
 
@@ -235,6 +272,7 @@ async def create_brokerage_account(payload: dict) -> dict:
         "created_at": datetime.now().replace(microsecond=0).isoformat(),
     }
     _brokerage_accounts[customer_id] = account
+    _save_brokerage()
     return {"account_id": account["account_id"], "status": account["status"]}
 
 
@@ -292,6 +330,8 @@ async def create_brokerage_order(payload: dict) -> dict:
         "ts": datetime.now().replace(microsecond=0).isoformat(),
     }
     _brokerage_orders.append(order)
+    _save_clients()
+    _save_brokerage()
     return {
         "order_id": order_id,
         "status": "executed",
