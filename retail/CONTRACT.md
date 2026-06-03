@@ -27,6 +27,16 @@ from_client_id, new_balance_rub, tx_id, ts}`.
 ### GET /corporate
 HTML-страница корпоративного банкинга. Сотрудник компании вводит ID корпоративного счёта, видит баланс и реквизиты компании, заполняет форму платежа. Для человека, не для других блоков.
 
+### POST /api/loan/decision
+Решение по потребительскому кредиту (прокси к cib `POST /loan/decision`).
+Принимает `{customer_id, amount_rub, term_months}`.
+Возвращает `{approved, reason, amount_rub, term_months, rate_pct, monthly_payment_rub}`.
+
+### POST /api/loan/disburse
+Выдача кредита (прокси к backend `POST /loans`).
+Принимает `{customer_id, amount_rub, term_months, rate_pct}`.
+Возвращает `{loan_id, customer_id, amount_rub, term_months, rate_pct, monthly_payment_rub, new_balance_rub}`.
+
 ### GET /api/deposit-product
 Данные о вкладе (прокси к cib `GET /products`, фильтр по id `deposit-base`).
 Возвращает `{id, name, rate_pct, ...}`. Используется для отображения баннера на главной.
