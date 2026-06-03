@@ -221,7 +221,7 @@
         </div>
         <div style="font-size:32px;margin-left:12px;">🏦</div>
       </div>
-      <button onclick="document.querySelector('[data-tab=\\'credit\\']').click()" style="margin-top:14px;width:100%;padding:11px;background:var(--raiff);color:var(--text);border:0;border-radius:8px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;">Открыть вклад</button>
+      <button onclick="document.querySelector('[data-tab=\\'deposit\\']').click()" style="margin-top:14px;width:100%;padding:11px;background:var(--raiff);color:var(--text);border:0;border-radius:8px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;">Открыть вклад</button>
     </div>
 
     <a href="/corporate" style="display:block;margin:10px 22px 0;padding:14px 16px;background:#1a2a3a;border-radius:10px;text-decoration:none;display:flex;align-items:center;justify-content:space-between;">
@@ -256,6 +256,7 @@
       <button class="tab active" data-tab="transfers" data-i18n="tab_transfers">Переводы</button>
       <button class="tab" data-tab="credit" data-i18n="tab_credit">Кредитная карта</button>
       <button class="tab" data-tab="loan">Кредит</button>
+      <button class="tab" data-tab="deposit">Вклад</button>
     </div>
 
     <div class="tab-pane show" data-pane="transfers">
@@ -318,6 +319,36 @@
         <button class="btn primary" id="loan-confirm-btn" style="margin-top:14px;">Получить деньги</button>
       </div>
       <div id="loan-disburse-result"></div>
+    </div>
+
+    <div class="tab-pane" data-pane="deposit">
+      <div class="section-title">Открыть срочный вклад — 20% годовых</div>
+      <div class="form-row">
+        <label>Клиент</label>
+        <select id="deposit-client-select"></select>
+      </div>
+      <div class="form-row">
+        <label>Сумма вклада, ₽</label>
+        <input id="deposit-amount" type="number" min="10000" placeholder="от 10 000 ₽" />
+      </div>
+      <div class="form-row">
+        <label>Срок</label>
+        <select id="deposit-term">
+          <option value="3">3 месяца</option>
+          <option value="6">6 месяцев</option>
+          <option value="12" selected>12 месяцев</option>
+          <option value="24">24 месяца</option>
+          <option value="36">36 месяцев</option>
+        </select>
+      </div>
+      <button class="btn primary" id="deposit-check-btn">Рассчитать условия</button>
+      <div id="deposit-check-result"></div>
+      <div id="deposit-offer" style="display:none;margin-top:16px;padding:16px;border:1px solid var(--rule);border-radius:10px;">
+        <div class="section-title" style="margin-top:0">Условия вклада</div>
+        <div id="deposit-offer-details"></div>
+        <button class="btn primary" id="deposit-confirm-btn" style="margin-top:14px;">Открыть вклад</button>
+      </div>
+      <div id="deposit-open-result"></div>
     </div>
   </div>
 
@@ -526,6 +557,9 @@
           `<option value="${c.id}" data-income="${c.income_rub || 0}" data-overdue="${c.has_overdue_history || false}" data-payroll="${c.employer_id ? "true" : "false"}">${c.name}</option>`
         ).join("");
         loanClientSel.innerHTML = items.map(c =>
+          `<option value="${c.id}">${c.name}</option>`
+        ).join("");
+        depositClientSel.innerHTML = items.map(c =>
           `<option value="${c.id}">${c.name}</option>`
         ).join("");
         showPreApproval();
@@ -856,6 +890,82 @@
 
     // populate loan client selector when clients load
     const _origLoadClients = loadClients;
+
+    // ---- deposit tab ----
+    const depositClientSel = document.getElementById("deposit-client-select");
+    const depositCheckBtn = document.getElementById("deposit-check-btn");
+    const depositCheckResult = document.getElementById("deposit-check-result");
+    const depositOffer = document.getElementById("deposit-offer");
+    const depositOfferDetails = document.getElementById("deposit-offer-details");
+    const depositConfirmBtn = document.getElementById("deposit-confirm-btn");
+    const depositOpenResult = document.getElementById("deposit-open-result");
+    let pendingDeposit = null;
+
+    depositCheckBtn.addEventListener("click", async () => {
+      const clientId = depositClientSel.value;
+      const amount = +document.getElementById("deposit-amount").value;
+      const term = +document.getElementById("deposit-term").value;
+      if (!clientId || !amount || amount < 10000) {
+        depositCheckResult.innerHTML = `<div class="alert error">Укажите сумму от 10 000 ₽</div>`;
+        return;
+      }
+      depositOffer.style.display = "none";
+      depositOpenResult.innerHTML = "";
+      depositCheckResult.innerHTML = `<div class="alert info">Рассчитываем условия…</div>`;
+      try {
+        const r = await fetch("/api/deposit/terms", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({customer_id: clientId, amount_rub: amount, term_months: term}),
+        });
+        const d = await r.json();
+        if (!r.ok) { depositCheckResult.innerHTML = `<div class="alert error">${d.detail || "ошибка"}</div>`; return; }
+        if (!d.approved) { depositCheckResult.innerHTML = `<div class="alert error">Отказ: ${d.reason || "нет данных"}</div>`; return; }
+        depositCheckResult.innerHTML = "";
+        pendingDeposit = {customer_id: clientId, amount_rub: d.amount_rub, term_months: d.term_months};
+        const earned = Math.round(d.amount_rub * d.rate_pct / 100 * d.term_months / 12);
+        depositOfferDetails.innerHTML = `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div><div style="font-size:11px;color:var(--muted)">Сумма</div><div style="font-weight:600">${fmt.format(d.amount_rub)} ₽</div></div>
+            <div><div style="font-size:11px;color:var(--muted)">Срок</div><div style="font-weight:600">${d.term_months} мес.</div></div>
+            <div><div style="font-size:11px;color:var(--muted)">Ставка</div><div style="font-weight:600">${d.rate_pct}% годовых</div></div>
+            <div><div style="font-size:11px;color:var(--muted)">Доход</div><div style="font-weight:600;color:var(--good)">+${fmt.format(earned)} ₽</div></div>
+          </div>`;
+        depositOffer.style.display = "block";
+      } catch(e) { depositCheckResult.innerHTML = `<div class="alert error">Сервер не ответил</div>`; }
+    });
+
+    depositConfirmBtn.addEventListener("click", async () => {
+      if (!pendingDeposit) return;
+      depositOffer.style.display = "none";
+      depositOpenResult.innerHTML = `<div class="alert info">Открываем вклад…</div>`;
+      try {
+        const r = await fetch("/api/deposit/open", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(pendingDeposit),
+        });
+        const d = await r.json();
+        if (r.ok) {
+          const opt = sel.selectedOptions[0];
+          if (opt) opt.dataset.balance = d.new_balance_rub;
+          updateBalanceDisplay(d.new_balance_rub, +balanceBroker.textContent.replace(/\s/g,"") || 0);
+          depositOpenResult.innerHTML = `<div class="alert ok">
+            Вклад открыт! ${fmt.format(d.amount_rub)} ₽ размещено.<br/>
+            Ставка: ${d.rate_pct}% годовых · Срок: ${d.term_months} мес.<br/>
+            Новый баланс: ${fmt.format(d.new_balance_rub)} ₽<br/>
+            <span style="font-size:11px;color:var(--good)">Номер вклада: ${d.deposit_id}</span>
+          </div>`;
+          pendingDeposit = null;
+        } else {
+          depositOpenResult.innerHTML = `<div class="alert error">${d.detail || "ошибка"}</div>`;
+          depositOffer.style.display = "block";
+        }
+      } catch(e) {
+        depositOpenResult.innerHTML = `<div class="alert error">Сервер не ответил</div>`;
+        depositOffer.style.display = "block";
+      }
+    });
 
     // ---- deposit banner ----
     (async function loadDepositBanner() {
