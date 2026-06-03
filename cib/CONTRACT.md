@@ -43,6 +43,14 @@ Tiers by segment — standard (mass, sme): SBER, GAZP, LKOH, MGNT; mass_affluent
 Response includes allowed_tickers list.
 Returns 404 if customer not found.
 
+### POST /loan/decision
+Consumer loan decision. Accepts JSON `{"customer_id": "<id>", "amount_rub": int, "term_months": int}`.
+Returns `{"approved": bool, "reason": "...", "amount_rub": int, "term_months": int, "rate_pct": float|null, "monthly_payment_rub": int|null}`.
+Rules: declined if overdue history; if loan > 3.3× annual income; if monthly payment > 40% of monthly income.
+Rate by segment — mass/sme: 18–25%; mass_affluent: 15–22%; premium/private: 12–18% (adjusted by risk score).
+Monthly payment uses standard annuity formula, rounded to nearest 100 RUB.
+Returns 404 if customer not found.
+
 ### POST /payroll/validate
 Payroll eligibility check for a corporate employer. Accepts JSON `{"employer_id": "<id>"}`.
 Calls backend for employer data and employee list. Sums all employee `income_rub` values.

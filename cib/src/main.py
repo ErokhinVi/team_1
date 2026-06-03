@@ -48,6 +48,12 @@ class CorpPaymentAuthRequest(BaseModel):
 class PayrollValidateRequest(BaseModel):
     employer_id: str
 
+
+class LoanDecisionRequest(BaseModel):
+    customer_id: str
+    amount_rub: int
+    term_months: int
+
 app = FastAPI(title="cib — корпоратив и бизнес-логика", version="1.0.0")
 
 
@@ -257,6 +263,51 @@ async def payroll_validate(req: PayrollValidateRequest) -> dict:
 
     return {"eligible": True, "reason": "Employer is eligible: sufficient funds and no overdue history",
             "total_payroll_rub": total_payroll_rub, "employees_count": len(employees)}
+
+
+@app.post("/loan/decision")
+async def loan_decision(req: LoanDecisionRequest) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(f"{BACKEND_URL}/clients/{req.customer_id}")
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Backend unavailable")
+
+    customer = resp.json()
+    income_rub = customer.get("income_rub", 0)
+    has_overdue = customer.get("has_overdue_history", False)
+    risk_score = customer.get("risk_score", 0.5)
+    segment = customer.get("segment", "mass")
+
+    def decline(reason: str) -> dict:
+        return {"approved": False, "reason": reason, "amount_rub": req.amount_rub,
+                "term_months": req.term_months, "rate_pct": None, "monthly_payment_rub": None}
+
+    if has_overdue:
+        return decline("Declined: history of overdue payments on record")
+
+    if income_rub * 12 < req.amount_rub * 0.3:
+        return decline(f"Declined: requested amount exceeds 3.3× annual income ({income_rub * 12:,.0f} RUB)")
+
+    if segment in ("premium", "private"):
+        rate_pct = round(12.0 + risk_score * 6.0, 1)
+    elif segment == "mass_affluent":
+        rate_pct = round(15.0 + risk_score * 7.0, 1)
+    else:
+        rate_pct = round(18.0 + risk_score * 7.0, 1)
+
+    r = rate_pct / 12 / 100
+    n = req.term_months
+    monthly = req.amount_rub * r / (1 - (1 + r) ** (-n))
+    monthly_payment_rub = int(round(monthly / 100) * 100)
+
+    if monthly_payment_rub > income_rub * 0.4:
+        return decline(f"Declined: monthly payment {monthly_payment_rub:,.0f} RUB exceeds 40% of monthly income ({income_rub:,.0f} RUB)")
+
+    return {"approved": True, "reason": "Approved: income and credit history checks passed",
+            "amount_rub": req.amount_rub, "term_months": req.term_months,
+            "rate_pct": rate_pct, "monthly_payment_rub": monthly_payment_rub}
 
 
 @app.get("/", response_class=HTMLResponse)
