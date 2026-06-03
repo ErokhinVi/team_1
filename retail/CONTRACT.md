@@ -58,8 +58,8 @@ HTML-страница брокериджа. Показывает список д
 
 ## Кого я зову у соседей
 
-- backend: `GET /clients`, `GET /transactions/{id}`, `POST /api/transfer`, `POST /credit-cards`, `GET /credit-cards`, `POST /credit-cards/{id}/activate`
-- cib: `POST /credit-decision` — решение по кредитной заявке
+- backend: `GET /clients`, `GET /transactions/{id}`, `POST /api/transfer`, `POST /credit-cards`, `GET /credit-cards`, `POST /credit-cards/{id}/activate`, `GET /brokerage/accounts/{id}`, `POST /brokerage/accounts`, `POST /brokerage/orders`
+- cib: `POST /credit-decision` — решение по кредитной заявке; `GET /products/brokerage` — список акций; `GET /brokerage/recommendation/{id}` — рекомендация по портфелю
 
 ## Где работает блок локально
 
