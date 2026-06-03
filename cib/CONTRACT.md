@@ -61,10 +61,13 @@ Returns 404 if customer not found.
 
 ### POST /payroll/validate
 Payroll eligibility check for a corporate employer. Accepts JSON `{"employer_id": "<id>"}`.
-Calls backend for employer data and employee list. Sums all employee `income_rub` values.
+Calls backend `GET /corporate/accounts/{employer_id}` for employer data and
+`GET /corporate/{employer_id}/employees` for employee list. Sums all employee
+`income_rub` values.
 Returns `{"eligible": bool, "reason": "...", "total_payroll_rub": int, "employees_count": int}`.
 Declined if: employer has overdue history, no employees found, or balance < total payroll.
 Returns 404 if employer not found.
+Example request with a real seeded employer: `{"employer_id": "corp-001"}`.
 
 ### POST /corporate/payment-auth
 Corporate payment authorisation. Accepts JSON:
@@ -72,31 +75,33 @@ Corporate payment authorisation. Accepts JSON:
 Checks: sufficient balance, no overdue obligations, large payments (>5M RUB) require premium segment.
 Returns `{"approved": bool, "reason": "...", "amount_rub"?, "counterparty"?}`.
 Returns 404 if client not found.
+Example request with real seeded corporate account ids:
+`{"corporate_client_id": "corp-001", "amount_rub": 1000, "counterparty": "corp-002", "purpose": "Supplier payment"}`.
 
 ## Corporate banking — agreed standards
 
 These are the team agreements for the corporate feature. All three blocks follow these.
 
 ### Corporate client ID format
-All corporate clients use the prefix `corp-` followed by a three-digit number, e.g. `corp-001` (seeded accounts: `corp-001`, `corp-002`, `corp-003`).
-This distinguishes corporate clients from personal clients (who use `c-` prefix) in every API call.
+All corporate clients use the prefix `corp-` followed by a three-digit number,
+e.g. `corp-001`, `corp-002`, `corp-003`. Personal customers use `c-` ids
+like `c-01394`; those ids are invalid for corporate payments and payroll.
 
 ### Corporate account fields
 A corporate client object must contain at minimum:
 - `id` — e.g. `corp-001`
 - `name` — company name
-- `sector` — e.g. `retail`, `manufacturing`, `energy`, `finance`
+- `industry` — e.g. `retail`, `manufacturing`, `energy`, `finance`
 - `balance_rub` — current account balance in roubles
-- `revenue_rub` — monthly revenue (equivalent of personal income)
-- `has_overdue_history` — boolean, same flag as on personal side
-- `segment` — `sme` for standard corporate clients, `premium` for large corporates
+- `monthly_turnover_rub` — monthly turnover
+- `opened_at` — account opening date
 
 ### Payment authorisation rules
 Every corporate payment goes through `POST /corporate/payment-auth` before backend executes it.
 Rules applied in order:
 1. Decline if `amount_rub > balance_rub` (insufficient funds)
-2. Decline if `has_overdue_history` is true (overdue obligations)
-3. Decline if `amount_rub > 5,000,000` and segment is not `premium` (large payment limit)
+2. Decline if backend returns `has_overdue_history: true` (overdue obligations)
+3. Decline if `amount_rub > 5,000,000` and backend segment is not `premium`
 4. Otherwise approve
 
 ### Integration flow

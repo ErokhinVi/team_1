@@ -104,11 +104,21 @@ async def payroll_run(payload: dict) -> dict:
 
 @app.post("/api/corporate/payments")
 async def corporate_payment(payload: dict) -> dict:
+    from_account_id = payload.get("from_account_id") or payload.get("corporate_client_id")
+    to_account_id = payload.get("to_account_id") or payload.get("counterparty")
+    amount_rub = payload.get("amount_rub")
+    purpose = payload.get("purpose")
+    canonical_payload = {
+        "from_account_id": from_account_id,
+        "to_account_id": to_account_id,
+        "amount_rub": amount_rub,
+        "purpose": purpose,
+    }
     auth_payload = {
-        "corporate_client_id": payload.get("from_account_id"),
-        "amount_rub": payload.get("amount_rub"),
-        "counterparty": payload.get("to_account_id"),
-        "purpose": payload.get("purpose"),
+        "corporate_client_id": from_account_id,
+        "amount_rub": amount_rub,
+        "counterparty": to_account_id,
+        "purpose": purpose,
     }
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -123,7 +133,7 @@ async def corporate_payment(payload: dict) -> dict:
         return {"approved": False, "reason": auth.get("reason", "платёж не авторизован")}
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            pay_r = await client.post(f"{BACKEND_URL}/corporate/payments", json=payload)
+            pay_r = await client.post(f"{BACKEND_URL}/corporate/payments", json=canonical_payload)
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"backend недоступен: {exc}")
     if pay_r.status_code != 200:
