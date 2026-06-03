@@ -22,7 +22,7 @@ Credit card approval decision. Accepts JSON `{"customer_id": "<id>"}`.
 Calls backend for customer data and returns:
 `{"approved": bool, "credit_limit_rub": int, "rate_pct": float|null, "reason": "..."}`.
 Rules: declined if no income or if customer has overdue payment history.
-If approved: limit = 30% of annual income; rate between 19% and 27% based on individual risk score.
+If approved: limit = 30% of annual income; rate_pct between 19.0 and 27.0 based on individual risk score.
 Returns 404 if customer not found.
 
 ## Кого я зову у соседей
