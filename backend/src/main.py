@@ -49,6 +49,7 @@ _corporate_accounts: list[dict[str, Any]] = []
 _corporate_accounts_by_id: dict[str, dict[str, Any]] = {}
 _corporate_payments: list[dict[str, Any]] = []
 _loans: list[dict[str, Any]] = []
+_deposits: list[dict[str, Any]] = []
 
 MOCK_PRICES: dict[str, float] = {
     "SBER": 312.5,
@@ -498,6 +499,21 @@ async def run_payroll(payload: dict) -> dict:
     }
 
 
+_DEPOSIT_RATES = {3: 7.0, 6: 9.5, 12: 12.0, 24: 11.0, 36: 10.5}
+
+
+def _deposit_rate(term_months: int) -> float:
+    if term_months <= 3:
+        return 7.0
+    if term_months <= 6:
+        return 9.5
+    if term_months <= 12:
+        return 12.0
+    if term_months <= 24:
+        return 11.0
+    return 10.5
+
+
 def _monthly_payment(amount: int, rate_pct: float, term_months: int) -> int:
     r = rate_pct / 12 / 100
     if r == 0:
@@ -543,5 +559,47 @@ async def create_loan(payload: dict) -> dict:
         "term_months": term_months,
         "rate_pct": rate_pct,
         "monthly_payment_rub": monthly_payment_rub,
+        "new_balance_rub": int(client["balance_rub"]),
+    }
+
+
+@app.post("/deposits")
+async def create_deposit(payload: dict) -> dict:
+    customer_id = payload.get("customer_id")
+    amount_rub = int(payload.get("amount_rub") or 0)
+    term_months = int(payload.get("term_months") or 0)
+    if not customer_id or customer_id not in _clients_by_id:
+        raise HTTPException(status_code=404, detail="клиент не найден")
+    if amount_rub <= 0:
+        raise HTTPException(status_code=400, detail="сумма должна быть положительной")
+    if term_months <= 0:
+        raise HTTPException(status_code=400, detail="срок должен быть положительным")
+    client = _clients_by_id[customer_id]
+    if client["balance_rub"] < amount_rub:
+        raise HTTPException(status_code=400, detail=f"недостаточно средств: на счёте {client['balance_rub']} ₽")
+    rate_pct = _deposit_rate(term_months)
+    from datetime import timedelta
+    maturity_date = (datetime.now() + timedelta(days=30 * term_months)).date().isoformat()
+    deposit_id = f"dep-{uuid.uuid4().hex[:8]}"
+    client["balance_rub"] = round(client["balance_rub"] - amount_rub, 2)
+    deposit = {
+        "deposit_id": deposit_id,
+        "customer_id": customer_id,
+        "amount_rub": amount_rub,
+        "term_months": term_months,
+        "rate_pct": rate_pct,
+        "maturity_date": maturity_date,
+        "status": "active",
+        "created_at": datetime.now().replace(microsecond=0).isoformat(),
+    }
+    _deposits.append(deposit)
+    _save_clients()
+    return {
+        "deposit_id": deposit_id,
+        "customer_id": customer_id,
+        "amount_rub": amount_rub,
+        "term_months": term_months,
+        "rate_pct": rate_pct,
+        "maturity_date": maturity_date,
         "new_balance_rub": int(client["balance_rub"]),
     }
