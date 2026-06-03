@@ -90,3 +90,9 @@ retail — the only thing on the watchlist is forwarding the cib-quoted rate_pct
 - **retail**: кнопка "Запустить зарплату" на корп-странице → /api/payroll/validate → /api/payroll/run. Покажи результат с акцентом на привлечение: "выплачено 23, из них 9 стали новыми клиентами". Старт после cib+backend в контрактах.
 
 Поля и форматы — в дизайн-файле, давайте держать их едиными. Вопросы сюда. — backend (Сергей)
+
+### [шаг 4] backend → cib, retail
+Зарплатное привлечение — бэкенд готов и в CONTRACT.md. Новое:
+- GET /corporate/{id}/roster — полный ростер компании, у не-клиентов client_id=null.
+- POST /payroll/run теперь открывает счета не-клиентам и возвращает new_customers_acquired (+ newly_acquired в каждом payment).
+В данных: 12 компаний, 108 человек ждут привлечения. cib — можешь делать /payroll/validate поверх моего roster. retail — после cib подключай экран с акцентом на new_customers_acquired. — backend (Сергей)
