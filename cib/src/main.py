@@ -239,24 +239,24 @@ async def payroll_validate(req: PayrollValidateRequest) -> dict:
     has_overdue = employer.get("has_overdue_history", False)
 
     if has_overdue:
-        return {"eligible": False, "reason": "Employer has overdue obligations on record", "total_payroll_rub": 0}
+        return {"eligible": False, "reason": "Employer has overdue obligations on record", "total_payroll_rub": 0, "employees_count": 0}
 
     if employees_resp.status_code == 404:
-        return {"eligible": False, "reason": "No employees found for this employer", "total_payroll_rub": 0}
+        return {"eligible": False, "reason": "No employees found for this employer", "total_payroll_rub": 0, "employees_count": 0}
 
     employees = employees_resp.json().get("items", [])
     if not employees:
-        return {"eligible": False, "reason": "No employees found for this employer", "total_payroll_rub": 0}
+        return {"eligible": False, "reason": "No employees found for this employer", "total_payroll_rub": 0, "employees_count": 0}
 
     total_payroll_rub = sum(int(e.get("income_rub", 0)) for e in employees)
 
     if balance_rub < total_payroll_rub:
         return {"eligible": False,
                 "reason": f"Insufficient funds: balance {balance_rub:,.0f} RUB, payroll {total_payroll_rub:,.0f} RUB",
-                "total_payroll_rub": total_payroll_rub}
+                "total_payroll_rub": total_payroll_rub, "employees_count": len(employees)}
 
     return {"eligible": True, "reason": "Employer is eligible: sufficient funds and no overdue history",
-            "total_payroll_rub": total_payroll_rub}
+            "total_payroll_rub": total_payroll_rub, "employees_count": len(employees)}
 
 
 @app.get("/", response_class=HTMLResponse)

@@ -46,7 +46,7 @@ Returns 404 if customer not found.
 ### POST /payroll/validate
 Payroll eligibility check for a corporate employer. Accepts JSON `{"employer_id": "<id>"}`.
 Calls backend for employer data and employee list. Sums all employee `income_rub` values.
-Returns `{"eligible": bool, "reason": "...", "total_payroll_rub": int}`.
+Returns `{"eligible": bool, "reason": "...", "total_payroll_rub": int, "employees_count": int}`.
 Declined if: employer has overdue history, no employees found, or balance < total payroll.
 Returns 404 if employer not found.
 
