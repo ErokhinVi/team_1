@@ -65,7 +65,7 @@ HTML-страница брокериджа. Показывает список д
 
 ### POST /api/brokerage/orders
 Размещение заявки на покупку/продажу акций (прокси к backend).
-Принимает `{customer_id, ticker, quantity, direction}`.
+Принимает `{customer_id, ticker, quantity, direction}`, где `ticker` — один из доступных: `SBER`, `GAZP`, `LKOH`, `YNDX`, `MGNT`; `direction` — `buy` или `sell`; `quantity` — целое > 0. Брокерский счёт создаётся автоматически при первой заявке.
 Возвращает `{order_id, status, ticker, direction, total_rub, new_account_balance_rub}`.
 
 ### POST /api/credit-apply
