@@ -86,6 +86,15 @@
     <div id="account-section" style="display:none">
       <div class="account-box" id="account-box"></div>
 
+      <div style="padding: 0 22px; margin-top: 16px;">
+        <button class="btn primary" id="payroll-btn">💰 Run Payroll</button>
+        <div id="payroll-result"></div>
+        <div id="payroll-confirm" style="display:none; margin-top:14px;">
+          <div class="alert info" id="payroll-summary"></div>
+          <button class="btn" id="payroll-confirm-btn" style="margin-top:10px;">Confirm — Send salaries</button>
+        </div>
+      </div>
+
       <div class="divider" style="margin:20px 22px 0"></div>
 
       <div class="payment-section">
@@ -150,6 +159,77 @@
         payResult.innerHTML = "";
       } catch(e) {
         loadResult.innerHTML = `<div class="alert error">Server did not respond</div>`;
+      }
+    });
+
+    const payrollBtn = document.getElementById("payroll-btn");
+    const payrollResult = document.getElementById("payroll-result");
+    const payrollConfirm = document.getElementById("payroll-confirm");
+    const payrollSummary = document.getElementById("payroll-summary");
+    const payrollConfirmBtn = document.getElementById("payroll-confirm-btn");
+    let pendingPayroll = null;
+
+    payrollBtn.addEventListener("click", async () => {
+      if (!currentAccountId) return;
+      payrollResult.innerHTML = `<div class="alert info">Checking eligibility…</div>`;
+      payrollConfirm.style.display = "none";
+      pendingPayroll = null;
+      try {
+        const r = await fetch("/api/payroll/validate", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({employer_id: currentAccountId}),
+        });
+        const d = await r.json();
+        if (!r.ok) {
+          payrollResult.innerHTML = `<div class="alert error">${d.detail || "Error"}</div>`;
+          return;
+        }
+        if (!d.eligible) {
+          payrollResult.innerHTML = `<div class="alert error">Payroll declined: ${d.reason || "not eligible"}</div>`;
+          return;
+        }
+        payrollResult.innerHTML = "";
+        pendingPayroll = {employer_id: currentAccountId};
+        payrollSummary.innerHTML = `Ready to pay <strong>${d.employees_count || "all"} employees</strong> — total <strong>${fmt.format(d.total_payroll_rub)} ₽</strong>. Confirm?`;
+        payrollConfirm.style.display = "block";
+      } catch(e) {
+        payrollResult.innerHTML = `<div class="alert error">Server did not respond</div>`;
+      }
+    });
+
+    payrollConfirmBtn.addEventListener("click", async () => {
+      if (!pendingPayroll) return;
+      payrollConfirm.style.display = "none";
+      payrollResult.innerHTML = `<div class="alert info">Sending salaries…</div>`;
+      try {
+        const r = await fetch("/api/payroll/run", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(pendingPayroll),
+        });
+        const d = await r.json();
+        if (r.ok) {
+          currentBalance = d.new_employer_balance_rub;
+          accountBox.querySelector(".balance-v").textContent = fmt.format(currentBalance) + " ₽";
+          const rows = (d.payments || []).slice(0, 5).map(p =>
+            `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;">
+              <span>${p.name}</span><span>+${fmt.format(p.amount_rub)} ₽</span>
+            </div>`
+          ).join("");
+          const more = (d.payments || []).length > 5
+            ? `<div style="font-size:11px;color:var(--muted);margin-top:4px;">…and ${d.payments.length - 5} more</div>` : "";
+          payrollResult.innerHTML = `<div class="alert ok">
+            Payroll complete — ${d.employees_paid} employees paid, total ${fmt.format(d.total_paid_rub)} ₽<br/>
+            New balance: ${fmt.format(d.new_employer_balance_rub)} ₽
+            <div style="margin-top:10px;border-top:1px solid rgba(47,122,58,0.2);padding-top:8px;">${rows}${more}</div>
+          </div>`;
+          pendingPayroll = null;
+        } else {
+          payrollResult.innerHTML = `<div class="alert error">${d.detail || "Error running payroll"}</div>`;
+        }
+      } catch(e) {
+        payrollResult.innerHTML = `<div class="alert error">Server did not respond</div>`;
       }
     });
 

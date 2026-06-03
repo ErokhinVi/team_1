@@ -78,6 +78,30 @@ async def corporate_account(account_id: str) -> dict:
     return await _backend_get(f"/corporate/accounts/{account_id}")
 
 
+@app.post("/api/payroll/validate")
+async def payroll_validate(payload: dict) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.post(f"{CIB_URL}/payroll/validate", json=payload)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"cib недоступен: {exc}")
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:300])
+    return r.json()
+
+
+@app.post("/api/payroll/run")
+async def payroll_run(payload: dict) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.post(f"{BACKEND_URL}/payroll/run", json=payload)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"backend недоступен: {exc}")
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:300])
+    return r.json()
+
+
 @app.post("/api/corporate/payments")
 async def corporate_payment(payload: dict) -> dict:
     auth_payload = {
