@@ -27,6 +27,10 @@ from_client_id, new_balance_rub, tx_id, ts}`.
 ### GET /corporate
 HTML-страница корпоративного банкинга. Сотрудник компании вводит ID корпоративного счёта, видит баланс и реквизиты компании, заполняет форму платежа. Для человека, не для других блоков.
 
+### GET /api/deposit-product
+Данные о вкладе (прокси к cib `GET /products`, фильтр по id `deposit-base`).
+Возвращает `{id, name, rate_pct, ...}`. Используется для отображения баннера на главной.
+
 ### POST /api/payroll/validate
 Проверка возможности выплаты зарплаты (прокси к cib `POST /payroll/validate`).
 Принимает `{employer_id}`. Возвращает `{eligible, reason, total_payroll_rub, employees_count}`.

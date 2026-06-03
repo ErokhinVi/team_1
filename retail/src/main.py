@@ -131,6 +131,17 @@ async def corporate_payment(payload: dict) -> dict:
     return {**pay_r.json(), "approved": True}
 
 
+@app.get("/api/deposit-product")
+async def deposit_product() -> dict:
+    try:
+        data = await _cib_get("/products")
+        items = data.get("items", [])
+        product = next((p for p in items if p.get("id") == "deposit-base"), None)
+        return product or {"id": "deposit-base", "name": "Вклад на срок", "rate_pct": 20.0}
+    except Exception:
+        return {"id": "deposit-base", "name": "Вклад на срок", "rate_pct": 20.0}
+
+
 @app.get("/brokerage", response_class=HTMLResponse)
 async def brokerage_page() -> str:
     f = STATIC_DIR / "brokerage.html"

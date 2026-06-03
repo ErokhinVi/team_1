@@ -211,7 +211,20 @@
       <select id="client-select"></select>
     </div>
 
-    <a href="/corporate" style="display:block;margin:16px 22px 0;padding:14px 16px;background:#1a2a3a;border-radius:10px;text-decoration:none;display:flex;align-items:center;justify-content:space-between;">
+    <div id="deposit-banner" style="margin:16px 22px 0;padding:16px;border-radius:12px;background:linear-gradient(135deg,#1a4a2a 0%,#0d2e19 100%);display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <div style="font-size:10px;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.12em;">Специальное предложение</div>
+          <div style="font-weight:700;font-size:18px;color:#fff;margin-top:4px;" id="deposit-rate-display">20%</div>
+          <div style="font-size:13px;color:rgba(255,255,255,0.85);margin-top:2px;" id="deposit-name-display">Вклад на срок</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.55);margin-top:2px;">годовых · фиксированная ставка</div>
+        </div>
+        <div style="font-size:32px;margin-left:12px;">🏦</div>
+      </div>
+      <button onclick="document.querySelector('[data-tab=\\'credit\\']').click()" style="margin-top:14px;width:100%;padding:11px;background:var(--raiff);color:var(--text);border:0;border-radius:8px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;">Открыть вклад</button>
+    </div>
+
+    <a href="/corporate" style="display:block;margin:10px 22px 0;padding:14px 16px;background:#1a2a3a;border-radius:10px;text-decoration:none;display:flex;align-items:center;justify-content:space-between;">
       <div>
         <div style="font-weight:600;font-size:14px;color:#fff">Corporate Banking</div>
         <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:2px">Payments between companies</div>
@@ -723,6 +736,19 @@
       const opt = sel.selectedOptions[0];
       if (opt) loadCards(opt.value);
     });
+
+    // ---- deposit banner ----
+    (async function loadDepositBanner() {
+      try {
+        const r = await fetch("/api/deposit-product");
+        const d = await r.json();
+        if (d && d.rate_pct) {
+          document.getElementById("deposit-rate-display").textContent = d.rate_pct + "% годовых";
+          document.getElementById("deposit-name-display").textContent = d.name || "Вклад на срок";
+          document.getElementById("deposit-banner").style.display = "block";
+        }
+      } catch(e) { /* banner stays hidden if CIB is unreachable */ }
+    })();
 
     loadClients();
   })();
