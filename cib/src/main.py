@@ -24,6 +24,8 @@ PRODUCTS = [
     {"id": "card-credit", "kind": "card", "name": "Кредитная карта", "segment": "mass"},
     {"id": "brokerage-standard", "kind": "brokerage", "name": "Брокерский счёт", "segment": "mass"},
     {"id": "brokerage-premium", "kind": "brokerage", "name": "Брокерский счёт Премиум", "segment": "premium"},
+    {"id": "corp-current-account", "kind": "corporate", "name": "Corporate Current Account", "segment": "sme"},
+    {"id": "corp-payments", "kind": "corporate", "name": "Corporate Payments Service", "segment": "sme"},
 ]
 
 
@@ -33,6 +35,13 @@ class CreditDecisionRequest(BaseModel):
 
 class SuitabilityRequest(BaseModel):
     customer_id: str
+
+
+class CorpPaymentAuthRequest(BaseModel):
+    corporate_client_id: str
+    amount_rub: float
+    counterparty: str
+    purpose: str = ""
 
 app = FastAPI(title="cib — корпоратив и бизнес-логика", version="1.0.0")
 
@@ -168,6 +177,43 @@ async def brokerage_suitability(req: SuitabilityRequest) -> dict:
             "allowed_instruments": ["stocks", "bonds", "etf"],
             "allowed_tickers": ["SBER", "GAZP", "LKOH", "MGNT"],
             "reason": "Standard customer: defensive stocks (SBER, GAZP, LKOH, MGNT), bonds and ETFs available"}
+
+
+@app.post("/corporate/payment-auth")
+async def corporate_payment_auth(req: CorpPaymentAuthRequest) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(f"{BACKEND_URL}/clients/{req.corporate_client_id}")
+
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="Corporate client not found")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Backend unavailable")
+
+    client_data = resp.json()
+    balance_rub = client_data.get("balance_rub", 0)
+    has_overdue = client_data.get("has_overdue_history", False)
+    segment = client_data.get("segment", "sme")
+
+    # Hard block: insufficient funds
+    if req.amount_rub > balance_rub:
+        return {"approved": False, "reason": f"Insufficient funds: balance {balance_rub:,.0f} RUB, requested {req.amount_rub:,.0f} RUB"}
+
+    # Hard block: overdue obligations
+    if has_overdue:
+        return {"approved": False, "reason": "Payment blocked: client has overdue obligations on record"}
+
+    # Large payment threshold — extra scrutiny above 5M RUB
+    large_payment_threshold = 5_000_000
+    if req.amount_rub > large_payment_threshold and segment not in ("premium", "private"):
+        return {"approved": False, "reason": f"Payments above {large_payment_threshold:,} RUB require premium corporate status; please contact your relationship manager"}
+
+    return {
+        "approved": True,
+        "corporate_client_id": req.corporate_client_id,
+        "amount_rub": req.amount_rub,
+        "counterparty": req.counterparty,
+        "reason": "Payment authorised: funds available, no overdue obligations"
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
