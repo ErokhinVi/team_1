@@ -76,6 +76,11 @@
       letter-spacing: -0.01em;
     }
     .balance .v .cur { font-size: 18px; opacity: 0.7; margin-left: 4px; }
+    .balance-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+    .balance-grid .item .l { font-size: 10px; opacity: 0.6; letter-spacing: 0.1em; text-transform: uppercase; }
+    .balance-grid .item .v { font-size: 18px; font-weight: 500; margin-top: 3px; }
+    .balance-total { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.15);
+      font-size: 12px; opacity: 0.7; display: flex; justify-content: space-between; }
 
     .tabs {
       display: flex; gap: 0;
@@ -185,6 +190,20 @@
     <div class="balance">
       <div class="l" data-i18n="balance_label">остаток на счёте</div>
       <div class="v"><span id="balance-v">—</span><span class="cur">₽</span></div>
+      <div class="balance-grid">
+        <div class="item">
+          <div class="l">Банковский счёт</div>
+          <div class="v"><span id="balance-bank">—</span> ₽</div>
+        </div>
+        <div class="item">
+          <div class="l">Инвестиции</div>
+          <div class="v"><span id="balance-broker">—</span> ₽</div>
+        </div>
+      </div>
+      <div class="balance-total">
+        <span>Итого</span>
+        <span id="balance-total">—</span>
+      </div>
     </div>
 
     <div class="client-picker">
@@ -423,6 +442,9 @@
     const fmt = new Intl.NumberFormat("ru-RU");
     const sel = document.getElementById("client-select");
     const balanceV = document.getElementById("balance-v");
+    const balanceBank = document.getElementById("balance-bank");
+    const balanceBroker = document.getElementById("balance-broker");
+    const balanceTotal = document.getElementById("balance-total");
     const topbarWho = document.getElementById("topbar-who");
     const txList = document.getElementById("tx-list");
     const transferResult = document.getElementById("transfer-result");
@@ -456,11 +478,33 @@
       } catch(e) { console.error(e); }
     }
 
+    function updateBalanceDisplay(bankAmt, brokerAmt) {
+      balanceV.textContent = fmt.format(bankAmt);
+      balanceBank.textContent = fmt.format(bankAmt);
+      balanceBroker.textContent = fmt.format(brokerAmt);
+      balanceTotal.textContent = fmt.format(bankAmt + brokerAmt) + " ₽";
+    }
+
+    async function loadBrokerBalance(clientId, bankAmt) {
+      try {
+        const r = await fetch(`/api/brokerage/account/${clientId}`);
+        const brokerAmt = r.ok ? ((await r.json()).balance_rub || 0) : 0;
+        updateBalanceDisplay(bankAmt, brokerAmt);
+      } catch(e) {
+        updateBalanceDisplay(bankAmt, 0);
+      }
+    }
+
     function onPickClient() {
       const opt = sel.selectedOptions[0];
       if (!opt) return;
-      balanceV.textContent = fmt.format(+opt.dataset.balance || 0);
+      const bankAmt = +opt.dataset.balance || 0;
       topbarWho.textContent = opt.dataset.name;
+      balanceV.textContent = fmt.format(bankAmt);
+      balanceBank.textContent = fmt.format(bankAmt);
+      balanceBroker.textContent = "…";
+      balanceTotal.textContent = "…";
+      loadBrokerBalance(opt.value, bankAmt);
       loadTx(opt.value);
     }
     sel.addEventListener("change", onPickClient);
@@ -497,9 +541,10 @@
     }
 
     function setBalance(newAmount) {
-      balanceV.textContent = fmt.format(newAmount);
       const opt = sel.selectedOptions[0];
       if (opt) opt.dataset.balance = newAmount;
+      const brokerAmt = +balanceBroker.textContent.replace(/\s/g, "") || 0;
+      updateBalanceDisplay(newAmount, brokerAmt);
     }
 
     // ---- форма перевода ----
