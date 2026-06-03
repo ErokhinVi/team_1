@@ -35,6 +35,17 @@ Returns `{"customer_id", "risk_score", "portfolio": [{"ticker", "allocation_pct"
 Low risk score → more SBER and GAZP (defensive); high risk score → more YNDX (growth).
 Returns 404 if customer not found.
 
+### GET /products/bonds
+Bond catalogue for retail customers. Returns `{total, items: [{bond_id, issuer, name, kind, coupon_pct, maturity_date, face_value_rub, price_rub}]}`.
+`kind` is `government` (OFZ, safer, ~11–12% coupon) or `corporate` (Sber/Gazp/Lukoil, ~15–17% coupon).
+Includes OFZ-26240, OFZ-26244, SBER-001P, GAZP-002P, LKOH-001.
+
+### GET /bonds/recommendation/{customer_id}
+Personalised bond mix based on customer risk profile. Calls backend `GET /clients/{id}`.
+Returns `{customer_id, risk_score, recommendation: [{bond_id, allocation_pct}], note}`.
+Low risk_score → mostly safe government OFZ; high risk_score → more higher-coupon corporate bonds.
+Returns 404 if customer not found.
+
 ### POST /brokerage/suitability
 Brokerage suitability check. Accepts JSON `{"customer_id": "<id>"}`.
 Returns `{"suitable": bool, "tier": "standard"|"premium"|null, "allowed_instruments": [...], "reason": "..."}`.

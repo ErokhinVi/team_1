@@ -25,6 +25,7 @@ PRODUCTS = [
     {"id": "card-credit", "kind": "card", "name": "Кредитная карта", "segment": "mass"},
     {"id": "brokerage-standard", "kind": "brokerage", "name": "Брокерский счёт", "segment": "mass"},
     {"id": "brokerage-premium", "kind": "brokerage", "name": "Брокерский счёт Премиум", "segment": "premium"},
+    {"id": "bonds", "kind": "bonds", "name": "Облигации", "segment": "mass"},
     {"id": "corp-current-account", "kind": "corporate", "name": "Corporate Current Account", "segment": "sme"},
     {"id": "corp-payments", "kind": "corporate", "name": "Corporate Payments Service", "segment": "sme"},
 ]
@@ -152,6 +153,63 @@ async def brokerage_recommendation(customer_id: str) -> dict:
             {"ticker": "MGNT", "allocation_pct": mgnt},
         ],
         "note": "Allocation shifts from defensive (SBER, GAZP) to growth (YNDX) based on risk profile"
+    }
+
+
+BONDS = [
+    {"bond_id": "OFZ-26240", "issuer": "Минфин РФ", "name": "ОФЗ 26240",
+     "kind": "government", "coupon_pct": 12.0, "maturity_date": "2027-05-15",
+     "face_value_rub": 1000, "price_rub": 980},
+    {"bond_id": "OFZ-26244", "issuer": "Минфин РФ", "name": "ОФЗ 26244",
+     "kind": "government", "coupon_pct": 11.5, "maturity_date": "2028-03-20",
+     "face_value_rub": 1000, "price_rub": 995},
+    {"bond_id": "SBER-001P", "issuer": "Сбербанк", "name": "Сбербанк 001P",
+     "kind": "corporate", "coupon_pct": 15.5, "maturity_date": "2027-09-10",
+     "face_value_rub": 1000, "price_rub": 1010},
+    {"bond_id": "GAZP-002P", "issuer": "Газпром", "name": "Газпром 002P",
+     "kind": "corporate", "coupon_pct": 16.5, "maturity_date": "2028-06-30",
+     "face_value_rub": 1000, "price_rub": 1005},
+    {"bond_id": "LKOH-001", "issuer": "Лукойл", "name": "Лукойл 001",
+     "kind": "corporate", "coupon_pct": 16.0, "maturity_date": "2027-12-01",
+     "face_value_rub": 1000, "price_rub": 1000},
+]
+
+
+@app.get("/products/bonds")
+async def bonds_products() -> dict:
+    return {"total": len(BONDS), "items": BONDS}
+
+
+@app.get("/bonds/recommendation/{customer_id}")
+async def bonds_recommendation(customer_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(f"{BACKEND_URL}/clients/{customer_id}")
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Backend unavailable")
+    customer = resp.json()
+    risk_score = customer.get("risk_score", 0.5)
+
+    # Low risk (score near 0) → mostly safe government OFZ;
+    # high risk (score near 1) → more higher-coupon corporate bonds.
+    ofz_26240 = round(40 - risk_score * 25, 1)
+    ofz_26244 = round(25 - risk_score * 15, 1)
+    sber = round(10 + risk_score * 10, 1)
+    gazp = round(10 + risk_score * 15, 1)
+    lkoh = round(100 - ofz_26240 - ofz_26244 - sber - gazp, 1)
+
+    return {
+        "customer_id": customer_id,
+        "risk_score": risk_score,
+        "recommendation": [
+            {"bond_id": "OFZ-26240", "allocation_pct": ofz_26240},
+            {"bond_id": "OFZ-26244", "allocation_pct": ofz_26244},
+            {"bond_id": "SBER-001P", "allocation_pct": sber},
+            {"bond_id": "GAZP-002P", "allocation_pct": gazp},
+            {"bond_id": "LKOH-001", "allocation_pct": lkoh},
+        ],
+        "note": "Allocation shifts from safe government OFZ to higher-coupon corporate bonds based on risk profile"
     }
 
 
@@ -423,6 +481,8 @@ th{{background:#16181f;color:#888;font-weight:500}}
 <li><span class="method post">POST</span>/loan/decision — consumer loan decision with annuity calculation</li>
 <li><span class="method post">POST</span>/brokerage/suitability — investor suitability check</li>
 <li><span class="method get">GET</span>/brokerage/recommendation/{{customer_id}} — personalised portfolio</li>
+<li><span class="method get">GET</span>/products/bonds — bond catalogue (government & corporate)</li>
+<li><span class="method get">GET</span>/bonds/recommendation/{{customer_id}} — risk-based bond mix</li>
 <li><span class="method post">POST</span>/corporate/payment-auth — corporate payment authorisation</li>
 <li><span class="method post">POST</span>/payroll/validate — payroll eligibility check</li>
 </ul>
