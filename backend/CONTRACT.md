@@ -34,6 +34,20 @@ transactions_loaded}`.
 имени получателя (поиск по подстроке). Возвращает `{status, kind
 (internal|external), amount_rub, to, from_client_id, new_balance_rub, tx_id, ts}`.
 
+### POST /credit-cards
+Выпустить кредитную карту клиенту. Принимает JSON `{customer_id, credit_limit}`.
+Создаёт карту со статусом `approved` и сгенерированным номером.
+Возвращает `{card_id, card_number, status}`.
+
+### GET /credit-cards?customer_id=
+Список кредитных карт клиента. Параметр `customer_id` обязателен.
+Возвращает `{total, items: [карты]}`. Карта — `{card_id, customer_id, card_number,
+credit_limit_rub, status, created_at}`.
+
+### POST /credit-cards/{card_id}/activate
+Активировать карту (перевести статус из `approved` в `active`).
+Возвращает `{card_id, status}`. Ошибка `400`, если карта уже не в статусе `approved`.
+
 ## Кого я зову у соседей
 
 Никого. backend — это ядро данных, оно ничего не зовёт у retail и cib.

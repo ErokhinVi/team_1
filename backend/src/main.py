@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import os
+import random
+import string
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -37,6 +39,8 @@ SEED_DIR = _find_seed_dir()
 _clients: list[dict[str, Any]] = []
 _clients_by_id: dict[str, dict[str, Any]] = {}
 _transactions: list[dict[str, Any]] = []
+_credit_cards: list[dict[str, Any]] = []
+_credit_cards_by_id: dict[str, dict[str, Any]] = {}
 
 
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -157,3 +161,50 @@ async def api_transfer(payload: dict) -> dict:
         "from_client_id": from_id, "new_balance_rub": sender["balance_rub"],
         "tx_id": out_tx["id"], "ts": now_iso,
     }
+
+
+def _generate_card_number() -> str:
+    return " ".join(
+        "".join(random.choices(string.digits, k=4)) for _ in range(4)
+    )
+
+
+@app.post("/credit-cards")
+async def create_credit_card(payload: dict) -> dict:
+    customer_id = payload.get("customer_id")
+    credit_limit = payload.get("credit_limit")
+    if not customer_id or customer_id not in _clients_by_id:
+        raise HTTPException(status_code=404, detail="клиент не найден")
+    if not credit_limit or int(credit_limit) <= 0:
+        raise HTTPException(status_code=400, detail="укажи положительный кредитный лимит")
+    card_id = f"card-{len(_credit_cards) + 1:06d}"
+    card = {
+        "card_id": card_id,
+        "customer_id": customer_id,
+        "card_number": _generate_card_number(),
+        "credit_limit_rub": int(credit_limit),
+        "status": "approved",
+        "created_at": datetime.now().replace(microsecond=0).isoformat(),
+    }
+    _credit_cards.append(card)
+    _credit_cards_by_id[card_id] = card
+    return {"card_id": card["card_id"], "card_number": card["card_number"], "status": card["status"]}
+
+
+@app.get("/credit-cards")
+async def list_credit_cards(customer_id: str = Query(...)) -> dict:
+    if customer_id not in _clients_by_id:
+        raise HTTPException(status_code=404, detail="клиент не найден")
+    cards = [c for c in _credit_cards if c["customer_id"] == customer_id]
+    return {"total": len(cards), "items": cards}
+
+
+@app.post("/credit-cards/{card_id}/activate")
+async def activate_credit_card(card_id: str) -> dict:
+    card = _credit_cards_by_id.get(card_id)
+    if not card:
+        raise HTTPException(status_code=404, detail="карта не найдена")
+    if card["status"] != "approved":
+        raise HTTPException(status_code=400, detail=f"карту нельзя активировать: статус '{card['status']}'")
+    card["status"] = "active"
+    return {"card_id": card_id, "status": card["status"]}
