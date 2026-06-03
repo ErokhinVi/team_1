@@ -248,6 +248,14 @@
       <div style="font-size:22px">💸</div>
     </div>
 
+    <div id="mortgage-banner" style="margin:10px 22px 0;padding:14px 16px;background:#2a1a3a;border-radius:10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+      <div>
+        <div style="font-weight:600;font-size:14px;color:#fff" data-i18n="mortgage_banner_title">Ипотека</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:2px" data-i18n="mortgage_banner_sub">Свой дом с выгодной ставкой</div>
+      </div>
+      <div style="font-size:22px">🏠</div>
+    </div>
+
     <div style="margin:10px 22px 0;padding:14px 16px;background:var(--raiff);border-radius:10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;" id="credit-banner">
       <div>
         <div style="font-weight:600;font-size:14px;color:var(--text)" data-i18n="banner_title">Кредитная карта</div>
@@ -404,6 +412,8 @@
         tab_credit:         "Кредитная карта",
         loan_banner_title:  "Потребительский кредит",
         loan_banner_sub:    "Деньги на любые цели за минуту",
+        mortgage_banner_title: "Ипотека",
+        mortgage_banner_sub:   "Свой дом с выгодной ставкой",
         banner_title:       "Кредитная карта",
         banner_sub:         "Бесплатно за 1 минуту",
         transfer_title:     "Перевести",
@@ -450,6 +460,8 @@
         tab_credit:         "Credit Card",
         loan_banner_title:  "Personal loan",
         loan_banner_sub:    "Cash for any purpose in a minute",
+        mortgage_banner_title: "Mortgage",
+        mortgage_banner_sub:   "Your own home at a great rate",
         banner_title:       "Credit Card",
         banner_sub:         "Free in 1 minute",
         transfer_title:     "Send money",
@@ -498,6 +510,8 @@
       tab_credit:         "Kreditkarte",
       loan_banner_title:  "Privatkredit",
       loan_banner_sub:    "Geld für jeden Zweck in einer Minute",
+      mortgage_banner_title: "Hypothek",
+      mortgage_banner_sub:   "Ihr Zuhause zu günstigem Zinssatz",
       banner_title:       "Kreditkarte",
       banner_sub:         "Kostenlos in 1 Minute",
       transfer_title:     "Geld senden",
@@ -1129,6 +1143,12 @@
     document.getElementById("loan-banner").addEventListener("click", () => {
       const loanTab = document.querySelector('.tab[data-tab="loan"]');
       if (loanTab) loanTab.click();
+    });
+
+    // баннер ипотеки открывает вкладку «Ипотека»
+    document.getElementById("mortgage-banner").addEventListener("click", () => {
+      const mortgageTab = document.querySelector('.tab[data-tab="mortgage"]');
+      if (mortgageTab) mortgageTab.click();
     });
 
     loadClients();
