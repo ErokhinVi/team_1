@@ -52,12 +52,24 @@ async def credit_decision(req: CreditDecisionRequest) -> dict:
         raise HTTPException(status_code=502, detail="Backend unavailable")
     customer = resp.json()
     income_rub = customer.get("income_rub", 0)
-    if income_rub > 0:
-        limit = int(income_rub * 12 * 0.30)
-        return {"approved": True, "credit_limit_rub": limit,
-                "reason": f"Income confirmed at {income_rub} RUB/month; limit set to 30% of annual income"}
-    return {"approved": False, "credit_limit_rub": 0,
-            "reason": "No confirmed income on record"}
+    has_overdue = customer.get("has_overdue_history", False)
+    risk_score = customer.get("risk_score", 0.5)
+
+    if income_rub <= 0:
+        return {"approved": False, "credit_limit_rub": 0, "rate_pct": None,
+                "reason": "No confirmed income on record"}
+
+    if has_overdue:
+        return {"approved": False, "credit_limit_rub": 0, "rate_pct": None,
+                "reason": "Declined: history of overdue payments on record"}
+
+    limit = int(income_rub * 12 * 0.30)
+
+    # Rate: 19% base, up to 27% for high-risk customers
+    rate_pct = round(19.0 + risk_score * 8.0, 1)
+
+    return {"approved": True, "credit_limit_rub": limit, "rate_pct": rate_pct,
+            "reason": f"Approved: income {income_rub} RUB/month, no overdue history; rate reflects individual risk profile"}
 
 
 @app.get("/", response_class=HTMLResponse)
