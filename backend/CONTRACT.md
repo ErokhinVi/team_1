@@ -8,7 +8,8 @@
 
 ### GET /health
 Проверка живости. Возвращает `{status, team, block, commit, clients_loaded,
-transactions_loaded, credit_history_loaded, credit_applications}`.
+transactions_loaded, credit_history_loaded, credit_applications}`
+(`credit_applications` — заявки обоих вариантов).
 
 ### GET /clients
 Список клиентов команды. Параметры запроса (все опциональные):
@@ -34,7 +35,52 @@ transactions_loaded, credit_history_loaded, credit_applications}`.
 имени получателя (поиск по подстроке). Возвращает `{status, kind
 (internal|external), amount_rub, to, from_client_id, new_balance_rub, tx_id, ts}`.
 
-## Кредиты
+## Релиз 1 — кредит наличными (по ТЗ retail, `retail/CONTRACT.md`)
+
+Это основные кредитные ручки для retail и cib. Ошибки: неизвестный клиент или
+заявка → `404`; неверный ввод → `422` с `detail` по-русски. Деньги — целые рубли.
+Данные в памяти: после перезапуска backend заявки и выданные кредиты
+обнуляются (seed на месте).
+
+### R1-B1. GET /credit-history/{client_id}
+`{client_id, total, items: [{id, product, principal_rub, term_months, rate_pct,
+opened_at, status, overdue_days_max}], summary: {active_count, max_overdue_days,
+has_active_overdue, monthly_debt_payment_rub, is_salary_client, avg_salary_rub}}`.
+`max_overdue_days` — по всем записям; `has_active_overdue` — есть `active` с
+просрочкой; `monthly_debt_payment_rub` — сумма аннуитетов по `active`
+(`P = S*m/(1-(1+m)^-n)`, `m = rate_pct/1200`), округлена; `is_salary_client` —
+есть транзакции `salary`; `avg_salary_rub` — средняя зарплата или 0.
+Кредиты, выданные через R1-B2, попадают сюда как `active`.
+Проверка: c-01000 → `2, 23160, false`; c-01002 → `0, 0, true, 40425`.
+
+### R1-B2. POST /api/credit-disburse
+Вход `{client_id, amount_rub, rate_pct, term_months, application_id?}`.
+Зачисляет сумму на счёт, добавляет транзакцию `credit_disbursement` и запись
+`consumer_credit / active` в кредитную историю. Ответ
+`{status: "ok", client_id, credit_id, tx_id, amount_rub, new_balance_rub}`.
+Повтор с тем же `application_id` деньги второй раз не зачисляет и возвращает
+тот же ответ.
+
+### R1-B3. Заявки
+`POST /api/credit-applications` — вход `{client_id, amount_rub, term_months,
+decision (approved|counter|declined|pending), rate_pct?, approved_amount_rub?,
+monthly_payment_rub?, reason?}` (лишние поля сохраняются как есть). Ответ
+`{application_id ("app-000001"), created_at, ...вход, status: null}`.
+
+`GET /api/credit-applications/{client_id}` — заявки клиента, новые сверху:
+`{total, items}`. После выдачи у заявки появляется `credit_id`.
+
+`PATCH /api/credit-applications/{application_id}` — вход
+`{status: "accepted"|"rejected_by_client"}`, ответ — обновлённая заявка
+(+`updated_at`).
+
+## Кредиты — ранний вариант (до ТЗ retail)
+
+Эти ручки появились раньше релиза 1 и продолжают работать, но для релиза 1
+используйте ручки выше: у них другие адреса (`/api/...`) и отдельное хранилище
+заявок. Плоские поля сводки в `/credit-history` (`active_principal_rub`,
+`active_monthly_payment_rub` и др.) сохранены для совместимости.
+
 
 Как задумано: retail принимает заявку от клиента → cib решает (одобрить или
 отказать, под какую ставку), беря данные клиента и кредитную историю у backend
