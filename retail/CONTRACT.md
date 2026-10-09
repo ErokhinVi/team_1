@@ -51,13 +51,22 @@ pending` (`pending` — если cib пока не ответил).
 `{amount_rub, term_months, created_at, label}`. `{total, items}`; если у
 backend ручки ещё нет — `{total: 0, items: []}`.
 
+### GET /api/products?client_id=
+Каталог cib (`GET /products`) для клиента: фильтр по `segment`/`segments`.
+`{total, segment, items}`. Вкладка «Продукты» в приложении.
+
+### POST /api/deposit-open
+Открыть вклад: `{client_id, product_id, amount_rub, term_months?, rate_pct?}` →
+backend `POST /api/deposits` (R2-B2). Ответ `{status: ok|pending, amount_rub,
+new_balance_rub?, message}`.
+
 ## Кого я зову у соседей
 
 - backend: `GET /clients`, `GET /clients/{id}`, `GET /transactions/{id}`, `POST /api/transfer`;
   релиз 1: `POST /api/credit-applications`, `PATCH /api/credit-applications/{id}`,
   `GET /api/credit-applications/{id}`, `POST /api/credit-disburse`
   (запасной путь: ранние `/credit-applications`)
-- cib: `POST /api/decision` (если 404 — `POST /credit/decide`, как в плане cib) — **жду от cib**.
+- cib: `GET /products` (вкладка «Продукты»); `POST /api/decision` (если 404 — `POST /credit/decide`, как в плане cib) — **жду от cib**.
   Шлю `{client_id, product, amount_rub, term_months, segment, income_rub,
   risk_score, has_overdue_history}`.
   Жду `{decision: approved|counter|declined, amount_rub, rate_pct, term_months,
@@ -83,9 +92,21 @@ backend ручки ещё нет — `{total: 0, items: []}`.
 > → `git push origin HEAD:dev`. Перенос в `main` (онлайн-банк и судья) команда
 > делает вслух, после приёмки.
 
-Версия ТЗ: 3 (9 октября, 12:45). Изменения v3: backend выложил в dev ручки
+Версия ТЗ: 4 (9 октября, 12:55). v4: уроки с табло судьи (ниже), задача R2-B2
+(вклады) и R1-C2 стала важнее — каталог cib уже показывается в приложении.
+Ранее, v3: Изменения v3: backend выложил в dev ручки
 релиза 1 (R1-B1, B2, B3, B5, B6) — retail переведён на них; осталась R1-B4.
 cib берёт поля сводки по именам ниже. Главный блокер релиза — R1-C1.
+
+## Что говорит судья (табло, 12:15)
+
+Мы — `team_a`: **671 клиент (+171), 17 из 20**, лидер. Судья похвалил кредитное
+ядро backend и снял баллы за то, что в мобильном приложении нет экрана заявки
+и истории кредитов. Это закрывает retail из dev — **его нужно перенести в main**.
+Команду B судья упрекнул в том, что каталог cib не дошёл до приложения и нельзя
+открыть вклад, а за ухудшение удобства снял клиентов. Отсюда правила:
+каждая функция — до кнопки в телефоне; ничего не ломать; выпускать часто
+(за простой клиенты уходят).
 
 ## Цепочка
 
@@ -183,6 +204,12 @@ name: "Кредит наличными", rate_pct: 15.5, segments: ["mass","mass
   Для отказных — `preapproved: false` и `reason`.
 - **R2-B1 (backend).** `GET /clients/{id}/profile` → карточка + `summary` из
   `/credit-history` + `last_salary_at` одним ответом (чтобы cib делал один запрос).
+- **R2-B2 (backend).** `POST /api/deposits` `{client_id, product_id, amount_rub,
+  term_months, rate_pct}` → списать сумму с баланса, создать вклад, транзакция
+  `deposit_open` (минус); `422`, если денег не хватает. `GET /api/deposits/{client_id}`
+  — вклады клиента. Ответ POST: `{status: "ok", deposit_id, new_balance_rub}`.
+- **R2-C2 (cib).** Ставка вклада по сегменту: mass_affluent +0.5 п.п.,
+  premium/private +1.0 п.п.; в `/products` поля `rate_pct`, `min_amount_rub`, `segments`.
 - **R2-R1 (retail).** Баннер «Вам одобрено до N ₽» на главном экране,
   кнопка ведёт в «Кредит» с подставленной суммой.
 

@@ -245,6 +245,8 @@
         <button class="btn primary" type="submit">Получить решение</button>
       </form>
       <div id="credit-result"></div>
+      <div class="section-title" style="margin-top:24px">Мои кредиты</div>
+      <div id="my-credits" class="tx-list"></div>
       <div class="section-title" style="margin-top:24px">Мои заявки</div>
       <div id="credit-history" class="tx-list"></div>
     </div>
@@ -313,6 +315,7 @@
       loadCreditPresets(opt.value);
       loadCreditHistory(opt.value);
       loadProducts(opt.value);
+      loadMyCredits(opt.value);
     }
     sel.addEventListener("change", onPickClient);
 
@@ -500,6 +503,7 @@
           if (d.new_balance_rub != null) setBalance(d.new_balance_rub);
           creditResult.innerHTML = `<div class="alert ok">${d.message} +${fmt.format(d.amount_rub)} ₽</div>`;
           loadTx(o.client_id);
+          loadMyCredits(o.client_id);
         } else {
           creditResult.innerHTML = `<div class="alert info">${d.message || d.detail || "Заявка принята"}</div>`;
         }
@@ -551,12 +555,28 @@
       }
     });
 
+    // ---- мои кредиты ----
+    const myCredits = document.getElementById("my-credits");
+    async function loadMyCredits(clientId) {
+      try {
+        const r = await fetch(`/api/my-credits/${clientId}`);
+        const d = await r.json();
+        const items = d.items || [];
+        if (!items.length) { myCredits.innerHTML = `<div class="empty">Открытых кредитов нет</div>`; return; }
+        myCredits.innerHTML = items.map(c => `<div class="tx-row">
+            <div><div class="desc">${c.name} · ${String(c.rate_pct).replace(".", ",")}%</div>
+            <div class="ts">${fmt.format(c.principal_rub)} ₽ · осталось ${c.months_left} мес${c.overdue ? " · была просрочка" : ""}</div></div>
+            <div class="amt">${fmt.format(c.monthly_payment_rub)} ₽/мес</div></div>`).join("")
+          + `<div class="hint" style="margin-top:8px">Всего платежей в месяц: ${fmt.format(d.monthly_total_rub)} ₽</div>`;
+      } catch(e) { myCredits.innerHTML = `<div class="empty">Не удалось загрузить кредиты</div>`; }
+    }
+
     // ---- продукты (каталог cib) ----
     const productList = document.getElementById("product-list");
     const productResult = document.getElementById("product-result");
     const KIND_TEXT = {
       credit:  p => `Ставка от ${String(p.rate_pct ?? "").replace(".", ",")}% · решение за минуту`,
-      deposit: p => `${String(p.rate_pct ?? "").replace(".", ",")}% годовых · проценты каждый месяц`,
+      deposit: p => `${String(p.rate_pct ?? "").replace(".", ",")}% годовых`,
       card:    p => "Бесплатное обслуживание · переводы без комиссии",
     };
     function openTab(name) { document.querySelector(`.tab[data-tab="${name}"]`).click(); }

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from datetime import date
 from pathlib import Path
 
 import httpx
@@ -357,3 +358,44 @@ async def deposit_open(payload: dict) -> dict:
         raise HTTPException(status_code=422, detail=detail or "Не получилось открыть вклад")
     return {"status": "pending", "amount_rub": amount,
             "message": "Заявка на вклад принята. Откроем его в течение нескольких минут."}
+
+
+# ---------------------------------------------------------------------------
+# "My credits": open loans with monthly payment and months left (backend data).
+# ---------------------------------------------------------------------------
+
+PRODUCT_LABELS = {"consumer_credit": "Кредит наличными", "auto_credit": "Автокредит",
+                  "mortgage": "Ипотека", "credit_card": "Кредитная карта"}
+
+
+def _months_left(opened_at: str, term: int, today: date) -> int:
+    try:
+        y, m, _ = (int(x) for x in opened_at[:10].split("-"))
+    except (ValueError, AttributeError):
+        return term
+    elapsed = (today.year - y) * 12 + (today.month - m)
+    return max(term - elapsed, 0)
+
+
+@app.get("/api/my-credits/{client_id}")
+async def my_credits(client_id: str) -> dict:
+    try:
+        h = await _backend_get(f"/credit-history/{client_id}")
+    except HTTPException:
+        return {"total": 0, "monthly_total_rub": 0, "items": []}
+    today = date.today()
+    items = []
+    for c in h.get("items", []):
+        if c.get("status") != "active":
+            continue
+        term = int(c.get("term_months") or 0)
+        left = _months_left(str(c.get("opened_at", "")), term, today)
+        if left <= 0 and not c.get("application_id"):
+            continue  # matured long ago in seed data: effectively repaid
+        pay = _annuity(float(c.get("principal_rub") or 0), float(c.get("rate_pct") or 0), term)
+        items.append({"id": c.get("id"), "name": PRODUCT_LABELS.get(c.get("product"), c.get("product")),
+                      "principal_rub": c.get("principal_rub"), "rate_pct": c.get("rate_pct"),
+                      "monthly_payment_rub": pay, "months_left": left or term,
+                      "overdue": (c.get("overdue_days_max") or 0) > 0})
+    return {"total": len(items), "monthly_total_rub": sum(i["monthly_payment_rub"] for i in items),
+            "items": items}
