@@ -667,3 +667,26 @@ async def r2_list_deposits(client_id: str) -> dict:
     items.reverse()
     return {"total": len(items), "total_amount_rub": sum(d["amount_rub"] for d in items),
             "items": items}
+
+
+# ---------------------------------------------------------------------------
+# Release 2, R2-B1 (spec from retail): one-call client profile for cib.
+# ---------------------------------------------------------------------------
+
+@app.get("/clients/{client_id}/profile")
+async def r2_client_profile(client_id: str) -> dict:
+    """R2-B1. Client card + credit `summary` + last salary date in one response,
+    so cib needs a single request to decide."""
+    c = _clients_by_id.get(client_id)
+    if not c:
+        raise HTTPException(status_code=404, detail=f"клиент {client_id} не найден")
+    salary_ts = [t["ts"] for t in _transactions
+                 if t["client_id"] == client_id and t.get("type") == "salary"]
+    deps = [d for d in _deposits.values() if d["client_id"] == client_id]
+    return {
+        **c,
+        "summary": _credit_summary(client_id)["summary"],
+        "last_salary_at": max(salary_ts)[:10] if salary_ts else None,
+        "deposits": {"count": len(deps),
+                     "total_amount_rub": sum(d["amount_rub"] for d in deps)},
+    }
