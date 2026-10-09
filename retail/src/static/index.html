@@ -495,7 +495,6 @@
     });
 
     const creditHistory = document.getElementById("credit-history");
-    const DEC_LABEL = { approved: "Выдан", rejected: "Отказ", pending: "На рассмотрении" };
     async function loadCreditHistory(clientId) {
       try {
         const r = await fetch(`/api/credit-applications/${clientId}`);
@@ -504,7 +503,7 @@
         creditHistory.innerHTML = items.length ? items.map(a => `<div class="tx-row">
             <div><div class="desc">${fmt.format(a.amount_rub)} ₽ · ${termLabel(a.term_months)}</div>
             <div class="ts">${(a.created_at || "").replace("T", " ").slice(0, 16)}</div></div>
-            <div class="amt">${DEC_LABEL[a.status] || a.status || ""}</div>
+            <div class="amt">${a.label || ""}</div>
           </div>`).join("") : `<div class="empty">Заявок пока нет</div>`;
       } catch(e) { creditHistory.innerHTML = `<div class="empty">Заявок пока нет</div>`; }
     }

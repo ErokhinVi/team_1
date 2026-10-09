@@ -182,27 +182,52 @@ OFFERS: dict[str, dict] = {}
 ACCEPTED: dict[str, dict] = {}
 MAX_OFFERS = 5000
 
+# Backend has two credit APIs: release-1 spec (/api/credit-*) on dev and the early
+# one (/credit-applications) on main. Prefer release 1, fall back to the early one.
+
+
+def _ok(r: httpx.Response | None) -> bool:
+    return r is not None and r.status_code in (200, 201)
+
+
+def _missing(r: httpx.Response | None) -> bool:
+    return r is not None and r.status_code in (404, 405)
+
 
 async def _record_outcome(result: dict) -> None:
-    """Approved/counter -> keep an offer for the client; declined -> log it at backend."""
     decision = result.get("decision")
-    if decision in ("approved", "counter"):
-        offer_id = uuid.uuid4().hex[:12]
-        if len(OFFERS) >= MAX_OFFERS:
-            OFFERS.pop(next(iter(OFFERS)))
-        OFFERS[offer_id] = {k: result.get(k) for k in (
-            "client_id", "amount_rub", "rate_pct", "term_months", "reason", "product")}
-        result["offer_id"] = offer_id
-    elif decision == "declined":
+    if decision not in ("approved", "counter", "declined"):
+        return
+    app_id = None
+    r = await _backend_post("/api/credit-applications", {
+        "client_id": result["client_id"],
+        "amount_rub": result["requested_amount_rub"],
+        "term_months": result["requested_term_months"],
+        "decision": decision,
+        "rate_pct": result.get("rate_pct"),
+        "approved_amount_rub": result.get("amount_rub"),
+        "monthly_payment_rub": result.get("monthly_payment_rub"),
+        "reason": result.get("reason"),
+    })
+    if _ok(r):
+        app_id = r.json().get("application_id")
+    elif _missing(r) and decision == "declined":
         await _backend_post("/credit-applications", {
             "client_id": result["client_id"],
             "amount_rub": result["requested_amount_rub"],
             "term_months": result["requested_term_months"],
             "product": result.get("product") or "consumer_credit",
-            "status": "rejected",
-            "reason": result.get("reason"),
-            "decided_by": "cib",
+            "status": "rejected", "reason": result.get("reason"), "decided_by": "cib",
         })
+    result["application_id"] = app_id
+    if decision in ("approved", "counter"):
+        offer_id = uuid.uuid4().hex[:12]
+        if len(OFFERS) >= MAX_OFFERS:
+            OFFERS.pop(next(iter(OFFERS)))
+        OFFERS[offer_id] = {k: result.get(k) for k in (
+            "client_id", "amount_rub", "rate_pct", "term_months", "reason", "product",
+            "application_id")}
+        result["offer_id"] = offer_id
 
 
 @app.post("/api/credit-accept")
@@ -213,34 +238,67 @@ async def credit_accept(payload: dict) -> dict:
     offer = OFFERS.get(offer_id)
     if not offer:
         raise HTTPException(status_code=422, detail="Предложение устарело — запросите решение ещё раз")
-    r = await _backend_post("/credit-applications", {
-        "client_id": offer["client_id"],
-        "amount_rub": offer["amount_rub"],
-        "term_months": offer["term_months"],
-        "product": offer.get("product") or "consumer_credit",
-        "status": "approved",
-        "rate_pct": offer["rate_pct"],
-        "reason": offer.get("reason"),
-        "decided_by": "cib",
+    app_id = offer.get("application_id") or f"offer-{offer_id}"
+    r = await _backend_post("/api/credit-disburse", {
+        "client_id": offer["client_id"], "amount_rub": offer["amount_rub"],
+        "rate_pct": offer["rate_pct"], "term_months": offer["term_months"],
+        "application_id": app_id,
     })
-    if r is None or r.status_code not in (200, 201):
+    if _ok(r):
+        d = r.json()
+        if offer.get("application_id"):
+            await _backend_post(f"/api/credit-applications/{offer['application_id']}",
+                                {"status": "accepted"}, "PATCH")
+    elif _missing(r):
+        r = await _backend_post("/credit-applications", {
+            "client_id": offer["client_id"], "amount_rub": offer["amount_rub"],
+            "term_months": offer["term_months"],
+            "product": offer.get("product") or "consumer_credit",
+            "status": "approved", "rate_pct": offer["rate_pct"],
+            "reason": offer.get("reason"), "decided_by": "cib",
+        })
+        d = r.json() if _ok(r) else None
+    else:
+        d = None
+    if d is None:
         return {"status": "pending", "amount_rub": offer["amount_rub"],
                 "message": "Договор подписан. Деньги поступят на счёт в течение нескольких минут."}
-    d = r.json()
     res = {"status": "ok", "amount_rub": offer["amount_rub"],
-           "new_balance_rub": d.get("new_balance_rub"), "application_id": d.get("id"),
+           "new_balance_rub": d.get("new_balance_rub"),
            "message": "Деньги зачислены на счёт."}
     ACCEPTED[offer_id] = res
     OFFERS.pop(offer_id, None)
     return res
 
 
+def _norm_early(a: dict) -> dict:
+    st = a.get("status")
+    return {"amount_rub": a.get("amount_rub"), "term_months": a.get("term_months"),
+            "created_at": a.get("created_at"),
+            "label": {"approved": "Выдан", "rejected": "Отказ"}.get(st, "На рассмотрении")}
+
+
+def _norm_r1(a: dict) -> dict:
+    dec = a.get("decision")
+    label = "Выдан" if a.get("status") == "accepted" else {
+        "approved": "Одобрено", "counter": "Встречное", "declined": "Отказ"}.get(dec, "На рассмотрении")
+    return {"amount_rub": a.get("approved_amount_rub") or a.get("amount_rub"),
+            "term_months": a.get("term_months"), "created_at": a.get("created_at"), "label": label}
+
+
 @app.get("/api/credit-applications/{client_id}")
 async def credit_applications(client_id: str) -> dict:
     try:
         async with httpx.AsyncClient(timeout=10.0) as http:
+            r = await http.get(f"{BACKEND_URL}/api/credit-applications/{client_id}")
+            if r.status_code == 200:
+                items = [_norm_r1(a) for a in r.json().get("items", [])]
+                return {"total": len(items), "items": items}
             r = await http.get(f"{BACKEND_URL}/credit-applications",
                                params={"client_id": client_id, "limit": 20})
+            if r.status_code == 200:
+                items = [_norm_early(a) for a in r.json().get("items", [])]
+                return {"total": len(items), "items": items}
     except httpx.HTTPError:
-        return {"total": 0, "items": []}
-    return r.json() if r.status_code == 200 else {"total": 0, "items": []}
+        pass
+    return {"total": 0, "items": []}
