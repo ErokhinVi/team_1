@@ -74,13 +74,27 @@ monthly_payment_rub?, reason?}` (лишние поля сохраняются к
 `{status: "accepted"|"rejected_by_client"}`, ответ — обновлённая заявка
 (+`updated_at`).
 
-## Кредиты — ранний вариант (до ТЗ retail)
+## Кредиты — основная схема (ТЗ retail v2)
 
-Эти ручки появились раньше релиза 1 и продолжают работать, но для релиза 1
-используйте ручки выше: у них другие адреса (`/api/...`) и отдельное хранилище
-заявок. Плоские поля сводки в `/credit-history` (`active_principal_rub`,
-`active_monthly_payment_rub` и др.) сохранены для совместимости.
+По ТЗ retail v2 именно эти ручки — основные: retail записывает заявку в
+`POST /credit-applications` после согласия клиента, cib читает
+`GET /credit-history/{id}`. Ручки `/api/...` из раздела «Релиз 1» выше тоже
+работают, но в v2 не используются.
 
+Изменения v2:
+- R1-B4: `active_count`, `active_principal_rub`, `active_monthly_payment_rub`
+  считаются только по `status == "active"`, у которых `opened_at + term_months`
+  ≥ сегодня (кредиты, выданные через заявки, — всегда). Добавлено
+  `has_active_overdue` — есть ли среди них `overdue_days_max > 0`. Тот же
+  фильтр — в `summary`.
+- R1-B5: в корне ответа `/credit-history` есть `is_salary_client` и
+  `avg_salary_rub`.
+- R1-B6: `POST /credit-applications` принимает необязательный
+  `idempotency_key`; повтор с тем же ключом возвращает ту же заявку, деньги
+  второй раз не зачисляются.
+
+Проверка: c-01000 → `2, 23160, false`; c-01001 → `1, 10269, false`;
+c-01002 → `0, 0, true, avg_salary_rub 40425`; c-01016 → нагрузка 101 076 ₽/мес.
 
 Как задумано: retail принимает заявку от клиента → cib решает (одобрить или
 отказать, под какую ставку), беря данные клиента и кредитную историю у backend
@@ -113,7 +127,7 @@ status (active|closed_clean|closed_with_overdue), overdue_days_max}`; у
 `{client_id, amount_rub, term_months (1–360), product?, purpose?}` — заявка
 создаётся в статусе `pending`. Если решение уже принято, можно сразу передать
 `status: "approved"` + `rate_pct` (годовых, %) или `status: "rejected"`, а
-также `reason?`, `decided_by?`.
+также `reason?`, `decided_by?`, `idempotency_key?` (защита от повтора).
 
 Ответ `201` — заявка:
 `{id ("ca-000001"), client_id, client_name, product, amount_rub, term_months,

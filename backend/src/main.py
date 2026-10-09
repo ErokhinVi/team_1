@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
+import calendar
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,7 @@ _transactions: list[dict[str, Any]] = []
 _credit_history: list[dict[str, Any]] = []
 _credit_by_client: dict[str, list[dict[str, Any]]] = {}
 _applications: dict[str, dict[str, Any]] = {}
+_idempotency: dict[str, str] = {}  # idempotency_key -> application id
 
 
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -197,10 +199,32 @@ def _annuity_payment(principal: float, rate_pct: float, months: int) -> int:
     return round(_annuity_exact(principal, rate_pct, months))
 
 
+def _credit_end_date(rec: dict[str, Any]) -> date:
+    """opened_at + term_months (day clamped to month length)."""
+    y, m, d = map(int, rec["opened_at"][:10].split("-"))
+    m += int(rec["term_months"])
+    y += (m - 1) // 12
+    m = (m - 1) % 12 + 1
+    return date(y, m, min(d, calendar.monthrange(y, m)[1]))
+
+
+def _is_current_credit(rec: dict[str, Any]) -> bool:
+    """R1-B4: an `active` credit counts as debt only while its term is running.
+    Credits issued through applications always count."""
+    if rec.get("status") != "active":
+        return False
+    if rec.get("application_id"):
+        return True
+    try:
+        return _credit_end_date(rec) >= date.today()
+    except (KeyError, ValueError, TypeError):
+        return True
+
+
 def _credit_summary(client_id: str) -> dict[str, Any]:
     items = sorted(_credit_by_client.get(client_id, []),
                    key=lambda r: r.get("opened_at", ""), reverse=True)
-    active = [r for r in items if r.get("status") == "active"]
+    active = [r for r in items if _is_current_credit(r)]
     max_overdue = max((r.get("overdue_days_max", 0) for r in items), default=0)
     salaries = [t["amount_rub"] for t in _transactions
                 if t["client_id"] == client_id and t.get("type") == "salary"]
@@ -227,6 +251,9 @@ def _credit_summary(client_id: str) -> dict[str, Any]:
             1 for r in items if r.get("status") == "closed_with_overdue"),
         "max_overdue_days": max_overdue,
         "has_overdue": max_overdue > 0,
+        "has_active_overdue": summary["has_active_overdue"],
+        "is_salary_client": summary["is_salary_client"],
+        "avg_salary_rub": summary["avg_salary_rub"],
         "items": items,
         "summary": summary,
     }
@@ -308,7 +335,7 @@ async def create_credit_application(
     }, {
         "client_id": "c-01000", "amount_rub": 300000, "term_months": 24,
         "status": "approved", "rate_pct": 19.9, "reason": "хорошая история",
-        "decided_by": "cib",
+        "decided_by": "cib", "idempotency_key": "offer-123",
     }]),
 ) -> dict:
     """Create a credit application. Without a decision it stays `pending`;
@@ -316,6 +343,11 @@ async def create_credit_application(
     client_id = payload.get("client_id")
     if client_id not in _clients_by_id:
         raise HTTPException(status_code=404, detail=f"клиент {client_id} не найден")
+    idem_key = payload.get("idempotency_key")
+    if idem_key is not None:
+        idem_key = str(idem_key)
+        if idem_key in _idempotency:
+            return _applications[_idempotency[idem_key]]
     try:
         amount = int(payload.get("amount_rub") or 0)
         term = int(payload.get("term_months") or 0)
@@ -344,11 +376,14 @@ async def create_credit_application(
         "created_at": _now_iso(),
         "rate_pct": None, "monthly_payment_rub": None, "reason": None,
         "decided_by": None, "decided_at": None,
+        "idempotency_key": idem_key,
     }
     if status != "pending":
         _decide(app_rec, status, payload.get("rate_pct"),
                 payload.get("reason"), payload.get("decided_by"))
     _applications[app_rec["id"]] = app_rec
+    if idem_key is not None:
+        _idempotency[idem_key] = app_rec["id"]
     return app_rec
 
 

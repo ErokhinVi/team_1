@@ -4,7 +4,7 @@
 # Note: Render deploys only from `main`; `dev` is NOT deployed automatically.
 set -e
 cd "$(dirname "$0")/.."
-MSG="${*:-backend: release 1 credit API (R1-B1..B3)}"
+MSG="${*:-backend: R1-B4..B6 current-debt filter, salary flags, idempotency_key}"
 BRANCH=dev
 
 if [ "$(git rev-parse --abbrev-ref HEAD)" != "$BRANCH" ]; then
