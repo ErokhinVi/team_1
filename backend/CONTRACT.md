@@ -8,7 +8,7 @@
 
 ### GET /health
 Проверка живости. Возвращает `{status, team, block, commit, clients_loaded,
-transactions_loaded}`.
+transactions_loaded, credit_history_loaded, credit_applications}`.
 
 ### GET /clients
 Список клиентов команды. Параметры запроса (все опциональные):
@@ -33,6 +33,61 @@ transactions_loaded}`.
 `{from_client_id, to, amount_rub}`. `to` — это либо id клиента, либо часть
 имени получателя (поиск по подстроке). Возвращает `{status, kind
 (internal|external), amount_rub, to, from_client_id, new_balance_rub, tx_id, ts}`.
+
+## Кредиты
+
+Как задумано: retail принимает заявку от клиента → cib решает (одобрить или
+отказать, под какую ставку), беря данные клиента и кредитную историю у backend
+→ решение записывается в backend. При одобрении backend сам зачисляет сумму
+кредита на счёт клиента, добавляет операцию `loan_disbursement` и вносит новый
+кредит в кредитную историю.
+
+Записать решение можно двумя способами — выбирайте, кому удобнее:
+- одним вызовом: `POST /credit-applications` сразу со `status` и `rate_pct`;
+- в два шага: `POST /credit-applications` (заявка `pending`), потом
+  `PATCH /credit-applications/{id}` с решением.
+
+Продукты (`product`): `consumer_credit` (по умолчанию), `auto_credit`,
+`mortgage`, `credit_card`. Статусы заявки: `pending`, `approved`, `rejected`.
+Данные хранятся в памяти: после перезапуска backend заявки обнуляются,
+кредитная история из seed — на месте.
+
+### GET /credit-history/{client_id}
+Кредитная история клиента + сводка для скоринга. Возвращает
+`{client_id, total, active_count, active_principal_rub,
+active_monthly_payment_rub, closed_clean_count, closed_with_overdue_count,
+max_overdue_days, has_overdue, items: [кредиты]}`. Кредит —
+`{id, client_id, product, principal_rub, term_months, rate_pct, opened_at,
+status (active|closed_clean|closed_with_overdue), overdue_days_max}`; у
+кредитов, выданных здесь, ещё `application_id`. Новые сверху. `404`, если
+клиента нет.
+
+### POST /credit-applications
+Подать заявку. Принимает JSON:
+`{client_id, amount_rub, term_months (1–360), product?, purpose?}` — заявка
+создаётся в статусе `pending`. Если решение уже принято, можно сразу передать
+`status: "approved"` + `rate_pct` (годовых, %) или `status: "rejected"`, а
+также `reason?`, `decided_by?`.
+
+Ответ `201` — заявка:
+`{id ("ca-000001"), client_id, client_name, product, amount_rub, term_months,
+purpose, status, created_at, rate_pct, monthly_payment_rub, reason,
+decided_by, decided_at}`; у одобренной ещё `credit_id, disbursement_tx_id,
+new_balance_rub`. `monthly_payment_rub` — аннуитетный платёж, считает backend.
+Ошибки: `404` — нет клиента; `400` — неверная сумма/срок/продукт/ставка.
+
+### PATCH /credit-applications/{id}
+Записать решение по заявке в статусе `pending`. Принимает
+`{status: "approved"|"rejected", rate_pct (обязательна для approved),
+reason?, decided_by?}`. Возвращает обновлённую заявку. `409`, если решение
+уже было; `404`, если заявки нет.
+
+### GET /credit-applications
+Список заявок, новые сверху. Фильтры: `client_id`, `status`, `limit`
+(по умолчанию 50). Возвращает `{total, items: [заявки]}`.
+
+### GET /credit-applications/{id}
+Одна заявка. `404`, если не найдена.
 
 ## Кого я зову у соседей
 
