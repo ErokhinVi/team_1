@@ -9,9 +9,16 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
 fi
 START="$(git rev-parse --abbrev-ref HEAD)"
 git fetch -q origin
-if git cherry origin/dev origin/main | grep -q '^+'; then
+# Every non-merge commit on main must already be in dev by content (patch-id).
+DEV_IDS="$(git log -p --no-merges origin/dev | git patch-id --stable | cut -d' ' -f1 | sort -u)"
+MISSING=""
+for c in $(git rev-list --no-merges origin/dev..origin/main); do
+  id="$(git show "$c" | git patch-id --stable | cut -d' ' -f1)"
+  echo "$DEV_IDS" | grep -qx "$id" || MISSING="$MISSING $c"
+done
+if [ -n "$MISSING" ]; then
   echo "СТОП: в main есть работа, которой нет в dev:"
-  git log --oneline origin/dev..origin/main
+  for c in $MISSING; do git log --oneline -1 "$c"; done
   echo "Ничего не изменено. Позовите Claude или модератора."; exit 1
 fi
 git switch -q main 2>/dev/null || git switch -q -c main origin/main
