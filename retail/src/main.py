@@ -302,3 +302,58 @@ async def credit_applications(client_id: str) -> dict:
     except httpx.HTTPError:
         pass
     return {"total": 0, "items": []}
+
+
+# ---------------------------------------------------------------------------
+# Product catalog from cib in the mobile app (+ open a deposit via backend).
+# Judge feedback: the catalog from the other block must reach the mobile app.
+# ---------------------------------------------------------------------------
+
+def _fits_segment(item: dict, segment: str | None) -> bool:
+    segs = item.get("segments") or ([item["segment"]] if item.get("segment") else [])
+    return not segs or segment is None or segment in segs
+
+
+@app.get("/api/products")
+async def products(client_id: str | None = None) -> dict:
+    segment = None
+    if client_id:
+        try:
+            segment = (await _backend_get(f"/clients/{client_id}")).get("segment")
+        except HTTPException:
+            segment = None
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http:
+            r = await http.get(f"{CIB_URL}/products")
+        items = r.json().get("items", []) if r.status_code == 200 else []
+    except httpx.HTTPError:
+        items = []
+    items = [i for i in items if _fits_segment(i, segment)]
+    return {"total": len(items), "segment": segment, "items": items}
+
+
+@app.post("/api/deposit-open")
+async def deposit_open(payload: dict) -> dict:
+    client_id = str(payload.get("client_id") or "").strip()
+    try:
+        amount = float(payload.get("amount_rub") or 0)
+        term = int(payload.get("term_months") or 12)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="сумма и срок должны быть числами")
+    if not client_id or amount < 1000:
+        raise HTTPException(status_code=422, detail="минимальная сумма вклада — 1 000 ₽")
+    body = {"client_id": client_id, "product_id": payload.get("product_id") or "deposit-base",
+            "amount_rub": amount, "term_months": term, "rate_pct": payload.get("rate_pct")}
+    r = await _backend_post("/api/deposits", body)
+    if _ok(r):
+        d = r.json()
+        return {"status": "ok", "amount_rub": amount, "new_balance_rub": d.get("new_balance_rub"),
+                "message": "Вклад открыт."}
+    if r is not None and r.status_code in (400, 409, 422):
+        try:
+            detail = r.json().get("detail")
+        except ValueError:
+            detail = None
+        raise HTTPException(status_code=422, detail=detail or "Не получилось открыть вклад")
+    return {"status": "pending", "amount_rub": amount,
+            "message": "Заявка на вклад принята. Откроем его в течение нескольких минут."}

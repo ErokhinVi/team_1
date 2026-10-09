@@ -173,6 +173,19 @@ reason, alternative, risk_group}`; `decision` ∈ `approved | counter | declined
 В `GET /products` добавить `{id: "consumer_credit", kind: "credit",
 name: "Кредит наличными", rate_pct: 15.5, segments: ["mass","mass_affluent"]}`.
 
+## Дальше — релиз 2 (брать, когда закончены задачи релиза 1)
+
+Цель: клиент видит готовое персональное предложение ещё до заявки.
+
+- **R2-C1 (cib).** `GET /api/offers/{client_id}` → `{preapproved: bool,
+  max_amount_rub, rate_pct, term_months: 36, monthly_payment_rub, reason}` —
+  та же политика R1-C1 с суммой = максимальный лимит группы (после PTI).
+  Для отказных — `preapproved: false` и `reason`.
+- **R2-B1 (backend).** `GET /clients/{id}/profile` → карточка + `summary` из
+  `/credit-history` + `last_salary_at` одним ответом (чтобы cib делал один запрос).
+- **R2-R1 (retail).** Баннер «Вам одобрено до N ₽» на главном экране,
+  кнопка ведёт в «Кредит» с подставленной суммой.
+
 ## Приёмка (seed, срок 24 мес, на 9 октября 2026, после R1-B4/B5)
 
 | Клиент | Сегмент | Сумма | Ожидаемое решение cib |

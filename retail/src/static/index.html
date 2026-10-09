@@ -183,6 +183,14 @@
     .offer.declined { border-color: var(--bad); }
     .offer.declined .head { color: var(--bad); }
 
+    .product { border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
+    .product .pn { font-weight: 600; font-size: 15px; }
+    .product .pr { font-size: 13px; color: var(--text-2); margin-top: 4px; line-height: 1.5; }
+    .product .row { display: flex; gap: 8px; margin-top: 12px; }
+    .product .row input { flex: 1; padding: 9px 10px; border: 1px solid var(--rule); border-radius: 6px;
+      background: var(--bg); font-family: inherit; font-size: 14px; }
+    .product .row .btn { width: auto; padding: 9px 14px; }
+
     .client-picker { padding: 14px 22px; border-bottom: 1px solid var(--rule); }
     .client-picker label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
     .client-picker select { width: 100%; margin-top: 4px; padding: 8px 10px;
@@ -210,6 +218,13 @@
     <div class="tabs">
       <button class="tab active" data-tab="transfers">Переводы</button>
       <button class="tab" data-tab="credit">Кредит</button>
+      <button class="tab" data-tab="products">Продукты</button>
+    </div>
+
+    <div class="tab-pane" data-pane="products">
+      <div class="section-title">Для вас</div>
+      <div id="product-list"></div>
+      <div id="product-result"></div>
     </div>
 
     <div class="tab-pane" data-pane="credit">
@@ -297,6 +312,7 @@
       loadTx(opt.value);
       loadCreditPresets(opt.value);
       loadCreditHistory(opt.value);
+      loadProducts(opt.value);
     }
     sel.addEventListener("change", onPickClient);
 
@@ -533,6 +549,56 @@
       } catch(e) {
         creditResult.innerHTML = `<div class="alert error">Сервис временно недоступен, попробуйте через минуту</div>`;
       }
+    });
+
+    // ---- продукты (каталог cib) ----
+    const productList = document.getElementById("product-list");
+    const productResult = document.getElementById("product-result");
+    const KIND_TEXT = {
+      credit:  p => `Ставка от ${String(p.rate_pct ?? "").replace(".", ",")}% · решение за минуту`,
+      deposit: p => `${String(p.rate_pct ?? "").replace(".", ",")}% годовых · проценты каждый месяц`,
+      card:    p => "Бесплатное обслуживание · переводы без комиссии",
+    };
+    function openTab(name) { document.querySelector(`.tab[data-tab="${name}"]`).click(); }
+
+    async function loadProducts(clientId) {
+      productResult.innerHTML = "";
+      try {
+        const r = await fetch(`/api/products?client_id=${encodeURIComponent(clientId)}`);
+        const d = await r.json();
+        const items = d.items || [];
+        if (!items.length) { productList.innerHTML = `<div class="empty">Каталог скоро появится</div>`; return; }
+        productList.innerHTML = items.map(p => {
+          const sub = (KIND_TEXT[p.kind] || (() => p.rate_pct ? `${p.rate_pct}%` : ""))(p);
+          let action = "";
+          if (p.kind === "credit") action = `<div class="row"><button type="button" class="btn primary" data-act="credit">Оформить</button></div>`;
+          if (p.kind === "deposit") action = `<div class="row"><input type="number" min="1000" step="1000" placeholder="Сумма, ₽" data-amt="${p.id}" />
+              <button type="button" class="btn primary" data-act="deposit" data-id="${p.id}" data-rate="${p.rate_pct ?? ""}">Открыть вклад</button></div>`;
+          return `<div class="product"><div class="pn">${p.name}</div><div class="pr">${sub}</div>${action}</div>`;
+        }).join("");
+      } catch(e) { productList.innerHTML = `<div class="empty">Каталог временно недоступен</div>`; }
+    }
+
+    productList.addEventListener("click", async ev => {
+      const b = ev.target.closest("button[data-act]"); if (!b) return;
+      if (b.dataset.act === "credit") { openTab("credit"); return; }
+      const opt = sel.selectedOptions[0]; if (!opt) return;
+      const amt = +(productList.querySelector(`input[data-amt="${b.dataset.id}"]`).value || 0);
+      if (amt < 1000) { productResult.innerHTML = `<div class="alert error">Минимальная сумма вклада — 1 000 ₽</div>`; return; }
+      b.disabled = true;
+      try {
+        const r = await fetch("/api/deposit-open", { method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ client_id: opt.value, product_id: b.dataset.id, amount_rub: amt, rate_pct: +b.dataset.rate || null }) });
+        const d = await r.json();
+        if (r.ok && d.status === "ok") {
+          if (d.new_balance_rub != null) setBalance(d.new_balance_rub);
+          productResult.innerHTML = `<div class="alert ok">${d.message} ${fmt.format(d.amount_rub)} ₽</div>`;
+          loadTx(opt.value);
+        } else {
+          productResult.innerHTML = `<div class="alert ${r.ok ? "info" : "error"}">${d.message || d.detail || "Не получилось"}</div>`;
+        }
+      } catch(e) { productResult.innerHTML = `<div class="alert error">Сервис временно недоступен</div>`; }
+      b.disabled = false;
     });
 
     loadClients();
