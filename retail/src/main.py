@@ -111,6 +111,49 @@ async def credit_presets(client_id: str) -> dict:
             "segment_label": SEGMENT_LABELS.get(seg, seg), **preset}
 
 
+def _norm_cib(d: dict) -> dict:
+    """Normalize cib's /credit/decide answer to retail's format."""
+    dec = d.get("decision") or d.get("status")
+    if dec == "counteroffer":
+        co = d.get("counter_offer") or {}
+        return {"decision": "counter", "amount_rub": co.get("amount_rub"),
+                "rate_pct": co.get("rate_pct", d.get("rate_pct")),
+                "term_months": co.get("term_months", d.get("term_months")),
+                "monthly_payment_rub": co.get("monthly_payment_rub"),
+                "total_payment_rub": co.get("total_payment_rub"),
+                "reason": d.get("reason")}
+    if dec == "rejected":
+        return {"decision": "declined", "reason": d.get("reason"),
+                "alternative": d.get("alternative")}
+    if dec == "approved":
+        return {"decision": "approved", "amount_rub": d.get("amount_rub"),
+                "rate_pct": d.get("rate_pct"), "term_months": d.get("term_months"),
+                "monthly_payment_rub": d.get("monthly_payment_rub"),
+                "total_payment_rub": d.get("total_payment_rub"), "reason": d.get("reason")}
+    return d  # already in retail format (/api/decision)
+
+
+async def _cib_decide(req: dict) -> dict | None:
+    """cib live API: POST /credit/decide (strict fields). Fallback: /api/decision."""
+    strict = {"client_id": req["client_id"], "amount_rub": req["amount_rub"],
+              "term_months": req["term_months"], "product": "consumer_credit"}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http:
+            r = await http.post(f"{CIB_URL}/credit/decide", json=strict)
+            if r.status_code in (404, 405):
+                r = await http.post(f"{CIB_URL}/api/decision", json=req)
+    except httpx.HTTPError:
+        return None
+    if r.status_code == 200:
+        try:
+            return _norm_cib(r.json())
+        except ValueError:
+            return None
+    if r.status_code == 422:
+        return {"_error": "Проверьте сумму (от 30 000 до 3 000 000 ₽) и срок (от 6 до 60 месяцев)"}
+    return None  # 503 and others: technical, not a credit refusal
+
+
 @app.post("/api/credit-apply")
 async def credit_apply(payload: dict) -> dict:
     client_id = str(payload.get("client_id") or "").strip()
@@ -139,20 +182,12 @@ async def credit_apply(payload: dict) -> dict:
             "segment_label": SEGMENT_LABELS.get(seg, seg),
             "requested_amount_rub": amount, "requested_term_months": term}
 
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as http:
-            r = await http.post(f"{CIB_URL}/api/decision", json=request_to_cib)
-            if r.status_code in (404, 405):
-                # cib's own plan names the route /credit/decide; accept either.
-                r = await http.post(f"{CIB_URL}/credit/decide", json=request_to_cib)
-    except httpx.HTTPError:
+    d = await _cib_decide(request_to_cib)
+    if d is None:
         return {**base, "decision": "pending",
                 "message": "Заявка принята. Решение пришлём в течение нескольких минут."}
-    if r.status_code != 200:
-        return {**base, "decision": "pending",
-                "message": "Заявка принята. Решение пришлём в течение нескольких минут."}
-
-    d = r.json()
+    if d.get("_error"):
+        raise HTTPException(status_code=422, detail=d["_error"])
     decision = d.get("decision", "pending")
     out = {**base, **d, "decision": decision}
     rate = d.get("rate_pct")
@@ -161,7 +196,8 @@ async def credit_apply(payload: dict) -> dict:
     if decision in ("approved", "counter") and rate is not None and not d.get("monthly_payment_rub"):
         out["monthly_payment_rub"] = _annuity(appr_amount, float(rate), appr_term)
     if out.get("monthly_payment_rub"):
-        out["total_cost_rub"] = out["monthly_payment_rub"] * appr_term
+        out["monthly_payment_rub"] = round(float(out["monthly_payment_rub"]))
+        out["total_cost_rub"] = round(float(d.get("total_payment_rub") or out["monthly_payment_rub"] * appr_term))
     await _record_outcome(out)
     return out
 
