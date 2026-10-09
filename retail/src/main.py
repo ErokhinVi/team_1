@@ -381,11 +381,16 @@ async def deposit_open(payload: dict) -> dict:
         raise HTTPException(status_code=422, detail="минимальная сумма вклада — 1 000 ₽")
     body = {"client_id": client_id, "product_id": payload.get("product_id") or "deposit-base",
             "amount_rub": amount, "term_months": term, "rate_pct": payload.get("rate_pct")}
+    if payload.get("idempotency_key"):
+        body["idempotency_key"] = str(payload["idempotency_key"])[:64]
     r = await _backend_post("/api/deposits", body)
     if _ok(r):
         d = r.json()
+        dep = d.get("deposit") or {}
+        inc = dep.get("expected_income_rub")
+        msg = "Вклад открыт." + (f" Доход к концу срока — {round(inc):,} ₽.".replace(",", " ") if inc else "")
         return {"status": "ok", "amount_rub": amount, "new_balance_rub": d.get("new_balance_rub"),
-                "message": "Вклад открыт."}
+                "message": msg}
     if r is not None and r.status_code in (400, 409, 422):
         try:
             detail = r.json().get("detail")
@@ -455,3 +460,21 @@ async def offer(client_id: str) -> dict:
     except (httpx.HTTPError, ValueError):
         pass
     return {"preapproved": False}
+
+
+@app.get("/api/my-deposits/{client_id}")
+async def my_deposits(client_id: str) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http:
+            r = await http.get(f"{BACKEND_URL}/api/deposits/{client_id}")
+        if r.status_code == 200:
+            d = r.json()
+            items = [{"amount_rub": x.get("amount_rub"), "rate_pct": x.get("rate_pct"),
+                      "term_months": x.get("term_months"), "maturity_date": x.get("maturity_date"),
+                      "expected_income_rub": x.get("expected_income_rub")}
+                     for x in d.get("items", []) if x.get("status", "active") == "active"]
+            return {"total": len(items), "total_amount_rub": sum(i["amount_rub"] or 0 for i in items),
+                    "items": items}
+    except (httpx.HTTPError, ValueError):
+        pass
+    return {"total": 0, "total_amount_rub": 0, "items": []}
