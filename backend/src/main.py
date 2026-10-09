@@ -85,7 +85,8 @@ async def health() -> dict:
             "transactions_loaded": len(_transactions),
             "credit_history_loaded": len(_credit_history),
             "credit_applications": len(_applications) + len(_r1_applications),
-            "deposits": len(_deposits)}
+            "deposits": len(_deposits),
+            "credit_payments": len(_payments)}
 
 
 @app.get("/clients")
@@ -255,7 +256,7 @@ def _credit_summary(client_id: str) -> dict[str, Any]:
         "has_active_overdue": summary["has_active_overdue"],
         "is_salary_client": summary["is_salary_client"],
         "avg_salary_rub": summary["avg_salary_rub"],
-        "items": items,
+        "items": [_credit_view(r) for r in items],
         "summary": summary,
     }
 
@@ -690,3 +691,120 @@ async def r2_client_profile(client_id: str) -> dict:
         "deposits": {"count": len(deps),
                      "total_amount_rub": sum(d["amount_rub"] for d in deps)},
     }
+
+
+# ---------------------------------------------------------------------------
+# Release 3, R3-B1 (spec from retail): paying off a credit.
+# Outstanding debt: seed credits follow the annuity schedule as of today;
+# credits issued here start at the principal. Payments made through
+# POST /api/credit-payments are subtracted from that.
+# ---------------------------------------------------------------------------
+
+_payments: dict[str, dict[str, Any]] = {}
+_payment_idempotency: dict[str, str] = {}  # idempotency_key -> payment_id
+
+
+def _months_elapsed(opened_at: str, today: date) -> int:
+    y, m, d = map(int, opened_at[:10].split("-"))
+    months = (today.year - y) * 12 + (today.month - m) - (1 if today.day < d else 0)
+    return max(0, months)
+
+
+def _scheduled_outstanding(rec: dict[str, Any]) -> float:
+    """Remaining principal by the annuity schedule after the payments due so far."""
+    s, n = rec["principal_rub"], int(rec["term_months"])
+    k = min(_months_elapsed(rec["opened_at"], date.today()), n)
+    if k >= n:
+        return 0.0
+    mr = rec["rate_pct"] / 1200
+    if mr <= 0:
+        return s * (n - k) / n
+    pay = _annuity_exact(s, rec["rate_pct"], n)
+    g = (1 + mr) ** k
+    return max(0.0, s * g - pay * (g - 1) / mr)
+
+
+def _outstanding(rec: dict[str, Any]) -> int:
+    if rec.get("status") != "active":
+        return 0
+    base = rec["principal_rub"] if rec.get("application_id") else _scheduled_outstanding(rec)
+    return max(0, round(base - rec.get("paid_rub", 0)))
+
+
+def _credit_view(rec: dict[str, Any]) -> dict[str, Any]:
+    """Credit-history item; active credits also get outstanding_rub and monthly_payment_rub."""
+    if rec.get("status") != "active":
+        return rec
+    return {**rec, "outstanding_rub": _outstanding(rec),
+            "monthly_payment_rub": _annuity_payment(
+                rec["principal_rub"], rec["rate_pct"], rec["term_months"])}
+
+
+@app.post("/api/credit-payments", status_code=201)
+async def r3_credit_payment(
+    payload: dict = Body(..., examples=[{
+        "client_id": "c-01000", "credit_id": "ch-000002", "amount_rub": 5000,
+        "idempotency_key": "pay-1",
+    }]),
+) -> dict:
+    """R3-B1. Pay towards a credit: debit the account, reduce the outstanding
+    debt, `credit_payment` transaction; at zero the credit becomes closed_clean."""
+    client = _r1_client(payload)
+    key = payload.get("idempotency_key")
+    if key is not None and str(key) in _payment_idempotency:
+        return _payments[_payment_idempotency[str(key)]]["response"]
+    credit_id = payload.get("credit_id")
+    credit = next((r for r in _credit_by_client.get(client["id"], [])
+                   if r.get("id") == credit_id), None)
+    if not credit:
+        raise HTTPException(status_code=404,
+                            detail=f"у клиента {client['id']} нет кредита {credit_id}")
+    if credit.get("status") != "active":
+        raise HTTPException(status_code=422, detail=f"кредит {credit_id} уже закрыт")
+    amount = _r1_int(payload, "amount_rub", 1, 1_000_000_000, "сумма")
+    outstanding = _outstanding(credit)
+    if outstanding <= 0:
+        raise HTTPException(status_code=422,
+                            detail=f"по кредиту {credit_id} долга нет: он выплачен по графику")
+    if amount > outstanding:
+        raise HTTPException(status_code=422,
+                            detail=f"сумма больше остатка долга: осталось {outstanding} ₽")
+    if amount > client["balance_rub"]:
+        raise HTTPException(
+            status_code=422,
+            detail=f"недостаточно средств: на счёте {client['balance_rub']} ₽")
+
+    now = _now_iso()
+    client["balance_rub"] -= amount
+    credit["paid_rub"] = credit.get("paid_rub", 0) + amount
+    left = _outstanding(credit)
+    closed = left <= 0
+    if closed:
+        credit["status"] = "closed_clean"
+        credit["closed_at"] = now[:10]
+        left = 0
+    pay_id = f"pay-{len(_payments) + 1:06d}"
+    tx = {
+        "id": f"t-{100000 + len(_transactions) + 1:08d}",
+        "client_id": client["id"], "type": "credit_payment", "amount_rub": -amount,
+        "ts": now, "counterparty": f"Погашение кредита {credit_id}",
+    }
+    _transactions.append(tx)
+    resp = {"status": "ok", "payment_id": pay_id, "credit_id": credit_id,
+            "amount_rub": amount, "new_balance_rub": client["balance_rub"],
+            "outstanding_rub": left, "closed": closed, "tx_id": tx["id"]}
+    _payments[pay_id] = {"client_id": client["id"], "ts": now, "response": resp}
+    if key is not None:
+        _payment_idempotency[str(key)] = pay_id
+    return resp
+
+
+@app.get("/api/credit-payments/{client_id}")
+async def r3_list_payments(client_id: str) -> dict:
+    """R3-B1. Client's credit payments, newest first."""
+    if client_id not in _clients_by_id:
+        raise HTTPException(status_code=404, detail=f"клиент {client_id} не найден")
+    items = [p["response"] | {"ts": p["ts"]} for p in _payments.values()
+             if p["client_id"] == client_id]
+    items.reverse()
+    return {"total": len(items), "items": items}
