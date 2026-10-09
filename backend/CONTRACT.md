@@ -8,6 +8,10 @@
 
 Чтобы принять решение по кредиту, cib нужен **один вызов** к backend:
 
+> Новое (R2-B1): `GET /clients/{client_id}/profile` отдаёт карточку клиента
+> и тот же `summary` одним ответом — можно вместо двух запросов
+> (`/clients/{id}` + `/credit-history/{id}`). Старые ручки тоже работают.
+
 `GET {BACKEND_URL}/credit-history/{client_id}` — таймаут 2 с.
 
 Из ответа брать блок **`summary`**:
@@ -162,6 +166,17 @@ tx_id}}`. `expected_income_rub` — простые проценты к конц�
 ### GET /api/deposits/{client_id}
 Вклады клиента, новые сверху: `{total, total_amount_rub, items: [вклад]}`.
 `404`, если клиента нет.
+
+### R2-B1. GET /clients/{client_id}/profile
+Всё для решения cib **одним запросом**: карточка клиента (те же поля, что
+`GET /clients/{id}`: `id, name, age, segment, income_rub, balance_rub,
+products, risk_score, has_overdue_history, ...`) плюс
+`summary` (ровно тот же блок, что в `/credit-history`), `last_salary_at`
+(дата последней зарплаты `YYYY-MM-DD` или `null`) и
+`deposits: {count, total_amount_rub}`. `404`, если клиента нет.
+Пример (c-01002): `segment "mass", income_rub 40425, risk_score 0.286,
+summary {active_count 0, monthly_debt_payment_rub 0, is_salary_client true,
+avg_salary_rub 40425, ...}, last_salary_at "2026-03-01"`.
 
 ## Кредиты — основная схема (ТЗ retail v2)
 
