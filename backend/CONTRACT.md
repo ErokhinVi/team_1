@@ -4,6 +4,48 @@
 видят только этот файл — не код. Если ручка изменилась или появилась новая —
 обнови этот файл, иначе сосед о ней не узнает.
 
+## Для cib — коротко (обновлено 9 октября, 12:35)
+
+Чтобы принять решение по кредиту, cib нужен **один вызов** к backend:
+
+`GET {BACKEND_URL}/credit-history/{client_id}` — таймаут 2 с.
+
+Из ответа брать **поля в корне** (не из `summary`, не из `items`):
+
+| Поле | Что значит | Как использовать в политике (ТЗ retail v2) |
+|---|---|---|
+| `active_monthly_payment_rub` | Сколько клиент уже платит в месяц по кредитам, срок которых ещё идёт | `debt` в шаге 6 (PTI) |
+| `has_active_overdue` | Есть текущая просрочка по идущему кредиту | стоп-фактор → `declined` |
+| `is_salary_client` | Получает зарплату в нашем банке | −1.0 п.п. к ставке |
+| `avg_salary_rub` | Средняя зарплата (0, если не зарплатный) | для справки/объяснения |
+| `active_count` | Число идущих кредитов | для объяснения клиенту |
+| `max_overdue_days` | Худшая просрочка за всю историю | только для объяснения; прошлая просрочка сама по себе — не отказ |
+
+Пример (c-01001, доход 73 118 ₽, risk 0.344):
+```
+{"client_id": "c-01001", "total": 3, "active_count": 1,
+ "active_monthly_payment_rub": 10269, "has_active_overdue": false,
+ "is_salary_client": false, "avg_salary_rub": 0, "max_overdue_days": 0, ...}
+```
+→ по политике: группа B, 20.0%, 150 000 ₽ на 24 мес → `approved`, 7 634 ₽/мес.
+
+Важно:
+- Уже закончившиеся по сроку «active» кредиты из seed backend в нагрузку
+  **не считает** (374 из 629). Пересчитывать по `items` не нужно.
+- Нет истории (`total: 0`) → все поля нулевые/false. Это **не отказ**.
+- `404` — клиента нет; ошибка или таймаут → деградация из ТЗ:
+  `debt = 0`, `has_active_overdue = false`, `is_salary_client = false`.
+- cib **ничего не пишет в backend**: заявку и выдачу денег делает retail
+  после согласия клиента (`POST /credit-applications` с `idempotency_key`).
+- Retail зовёт `POST /api/decision` (запасной вариант `/credit/decide`) —
+  лучше сделать `/api/decision`.
+- Где посмотреть живьём: `https://team1-backend.erokhinva.workers.dev/docs`
+  → `GET /credit-history/{client_id}` → Try it out.
+- Статус: `/credit-history` со всеми полями выше — в `dev`; в живом банке
+  (main) поля `has_active_overdue`, `is_salary_client`, `avg_salary_rub` в
+  корне и фильтр по сроку появятся после следующего выпуска dev → main.
+  До этого они есть в `summary` (без фильтра по сроку).
+
 ## Что я отдаю наружу
 
 ### GET /health
@@ -74,13 +116,27 @@ monthly_payment_rub?, reason?}` (лишние поля сохраняются к
 `{status: "accepted"|"rejected_by_client"}`, ответ — обновлённая заявка
 (+`updated_at`).
 
-## Кредиты — ранний вариант (до ТЗ retail)
+## Кредиты — основная схема (ТЗ retail v2)
 
-Эти ручки появились раньше релиза 1 и продолжают работать, но для релиза 1
-используйте ручки выше: у них другие адреса (`/api/...`) и отдельное хранилище
-заявок. Плоские поля сводки в `/credit-history` (`active_principal_rub`,
-`active_monthly_payment_rub` и др.) сохранены для совместимости.
+По ТЗ retail v2 именно эти ручки — основные: retail записывает заявку в
+`POST /credit-applications` после согласия клиента, cib читает
+`GET /credit-history/{id}`. Ручки `/api/...` из раздела «Релиз 1» выше тоже
+работают, но в v2 не используются.
 
+Изменения v2:
+- R1-B4: `active_count`, `active_principal_rub`, `active_monthly_payment_rub`
+  считаются только по `status == "active"`, у которых `opened_at + term_months`
+  ≥ сегодня (кредиты, выданные через заявки, — всегда). Добавлено
+  `has_active_overdue` — есть ли среди них `overdue_days_max > 0`. Тот же
+  фильтр — в `summary`.
+- R1-B5: в корне ответа `/credit-history` есть `is_salary_client` и
+  `avg_salary_rub`.
+- R1-B6: `POST /credit-applications` принимает необязательный
+  `idempotency_key`; повтор с тем же ключом возвращает ту же заявку, деньги
+  второй раз не зачисляются.
+
+Проверка: c-01000 → `2, 23160, false`; c-01001 → `1, 10269, false`;
+c-01002 → `0, 0, true, avg_salary_rub 40425`; c-01016 → нагрузка 101 076 ₽/мес.
 
 Как задумано: retail принимает заявку от клиента → cib решает (одобрить или
 отказать, под какую ставку), беря данные клиента и кредитную историю у backend
@@ -113,7 +169,7 @@ status (active|closed_clean|closed_with_overdue), overdue_days_max}`; у
 `{client_id, amount_rub, term_months (1–360), product?, purpose?}` — заявка
 создаётся в статусе `pending`. Если решение уже принято, можно сразу передать
 `status: "approved"` + `rate_pct` (годовых, %) или `status: "rejected"`, а
-также `reason?`, `decided_by?`.
+также `reason?`, `decided_by?`, `idempotency_key?` (защита от повтора).
 
 Ответ `201` — заявка:
 `{id ("ca-000001"), client_id, client_name, product, amount_rub, term_months,

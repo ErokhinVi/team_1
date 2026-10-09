@@ -1,3 +1,33 @@
+# 📣 КОМАНДЕ — от retail (обновлено 9 октября, 12:40)
+
+> Агентам cib и backend: если в этом блоке есть просьба к вашему блоку —
+> покажите её участнику и выполните. Детали — в разделе «РЕЛИЗ 1» ниже.
+
+**Счёт:** мы (team_a) — 818 клиентов, 19 из 20; team_b — 660, 16 из 20.
+Судья хвалит то, что доведено до кнопки в телефоне, и снимает за простой,
+за «возможность одна и реализована просто» и за ухудшение удобства.
+
+**Алексею (cib) — СРОЧНО, приоритет 1:** сделать `POST /api/decision` по
+R1-C1. Это единственное, чего не хватает: сейчас клиент в приложении видит
+«заявка принята» вместо решения. Поля backend — в backend/CONTRACT.md,
+раздел «Для cib — коротко». После — `GET /products` с кредитом (R1-C2) и
+`GET /api/offers/{client_id}` (R2-C1). Отправлять в dev.
+
+**Евгении (backend), приоритет 2:** выпустить dev → main сейчас (там
+«Продукты», «Мои кредиты» и R1-B4…B6) — иначе судья их не видит и считает
+простой. Затем вклады `POST /api/deposits` (R2-B2). После каждого
+выпуска dev → main — проверить, что `/health` всех трёх блоков отвечает.
+
+**Порядок фич по влиянию на оценку судьи:**
+
+| № | Фича | Почему первой | Блоки |
+|---|---|---|---|
+| 1 | Решение по кредиту в cib | Достраивает основную функцию до конца: без неё клиент не получает решения | cib |
+| 2 | Выпуск dev → main каждые 15–20 мин | Судья видит только main; простой = минус клиенты | backend (выпуск), все |
+| 3 | Вклады: открыть из «Продуктов» | Ширина продукта; прямое замечание судьи к другой команде | backend, retail ✅ |
+| 4 | Предодобрено «до N ₽» на главном экране | Судья: «кредит в два нажатия» | cib, retail |
+| 5 | Ставки вкладов по сегменту | Персонализация для mass_affluent | cib |
+
 # Контракт блока retail
 
 Сюда вписывай ручки, которые твой блок отдаёт наружу. Соседи по команде
@@ -40,20 +70,38 @@ pending` (`pending` — если cib пока не ответил).
 
 ### POST /api/credit-accept
 Клиент принимает одобренное/встречное предложение. Вход `{offer_id}` (выдаётся
-в ответе `/api/credit-apply`). Retail записывает в backend одобренную заявку
-(`POST /credit-applications`, `status: approved`) — backend зачисляет деньги.
+в ответе `/api/credit-apply`). Retail зовёт backend `POST /api/credit-disburse`
+(запасной путь — ранний `POST /credit-applications` со `status: approved`).
 Повторный вызов с тем же `offer_id` деньги второй раз не зачисляет. Ответ
 `{status: "ok"|"pending", amount_rub, new_balance_rub?, application_id?, message}`.
 
 ### GET /api/credit-applications/{client_id}
-История заявок клиента (прокси к backend `GET /credit-applications?client_id=`). `{total, items}`; если у
+История заявок клиента (прокси к backend `GET /api/credit-applications/{id}`,
+запасной путь — ранний `GET /credit-applications?client_id=`). Элемент:
+`{amount_rub, term_months, created_at, label}`. `{total, items}`; если у
 backend ручки ещё нет — `{total: 0, items: []}`.
+
+### GET /api/my-credits/{client_id}
+Открытые кредиты клиента (по `GET /credit-history` backend; истёкшие по сроку
+не показываем): `{total, monthly_total_rub, items: [{id, name, principal_rub,
+rate_pct, monthly_payment_rub, months_left, overdue}]}`.
+
+### GET /api/products?client_id=
+Каталог cib (`GET /products`) для клиента: фильтр по `segment`/`segments`.
+`{total, segment, items}`. Вкладка «Продукты» в приложении.
+
+### POST /api/deposit-open
+Открыть вклад: `{client_id, product_id, amount_rub, term_months?, rate_pct?}` →
+backend `POST /api/deposits` (R2-B2). Ответ `{status: ok|pending, amount_rub,
+new_balance_rub?, message}`.
 
 ## Кого я зову у соседей
 
 - backend: `GET /clients`, `GET /clients/{id}`, `GET /transactions/{id}`, `POST /api/transfer`;
-  релиз 1: `POST /credit-applications`, `GET /credit-applications?client_id=` (по контракту backend)
-- cib: `POST /api/decision` (если 404 — `POST /credit/decide`, как в плане cib) — **жду от cib**.
+  релиз 1: `POST /api/credit-applications`, `PATCH /api/credit-applications/{id}`,
+  `GET /api/credit-applications/{id}`, `POST /api/credit-disburse`
+  (запасной путь: ранние `/credit-applications`)
+- cib: `GET /products` (вкладка «Продукты»); `POST /api/decision` (если 404 — `POST /credit/decide`, как в плане cib) — **жду от cib**.
   Шлю `{client_id, product, amount_rub, term_months, segment, income_rub,
   risk_score, has_overdue_history}`.
   Жду `{decision: approved|counter|declined, amount_rub, rate_pct, term_months,
@@ -79,59 +127,65 @@ backend ручки ещё нет — `{total: 0, items: []}`.
 > → `git push origin HEAD:dev`. Перенос в `main` (онлайн-банк и судья) команда
 > делает вслух, после приёмки.
 
-Версия ТЗ: 2 (9 октября, 12:30). Изменения v2: backend уже сделал кредиты по
-своей схеме (`/credit-applications`, `/credit-history`) — retail и cib
-подстраиваются под неё; добавлены задачи R1-B4…R1-B6 и уточнён R1-C1.
+Версия ТЗ: 5 (9 октября, 12:45). v5: backend закрыл весь релиз 1 (R1-B1…B6);
+retail добавил «Мои кредиты» и «Продукты». **Единственный блокер — R1-C1 в cib.**
+Backend свободен → берёт R2-B2 (вклады). Следующий выпуск dev → main — сейчас.
+Ранее, v3: Изменения v3: backend выложил в dev ручки
+релиза 1 (R1-B1, B2, B3, B5, B6) — retail переведён на них; осталась R1-B4.
+cib берёт поля сводки по именам ниже. Главный блокер релиза — R1-C1.
 
-## Цепочка (как работает сейчас)
+## Что говорит судья (табло, 12:35)
+
+Мы — `team_a`: **818 клиентов (+318), 19 из 20**, лидер; team_b — 660, 16 из 20.
+Последний отзыв: кредит в приложении, решение с пояснением, зачисление, история,
+защита от повторной выдачи — хорошо; «новая возможность одна и реализована
+просто» → нужна ширина: вклады, «Мои кредиты», предодобренное предложение.
+Ранее (12:15, 671 клиент, 17 из 20): Судья похвалил кредитное
+ядро backend и снял баллы за то, что в мобильном приложении нет экрана заявки
+и истории кредитов. Это закрывает retail из dev — **его нужно перенести в main**.
+Команду B судья упрекнул в том, что каталог cib не дошёл до приложения и нельзя
+открыть вклад, а за ухудшение удобства снял клиентов. Отсюда правила:
+каждая функция — до кнопки в телефоне; ничего не ломать; выпускать часто
+(за простой клиенты уходят).
+
+## Цепочка
 
 ```
 клиент → retail POST /api/credit-apply
            ├─> backend GET /clients/{id}
            ├─> cib POST /api/decision  (или /credit/decide)
-           │     └─> backend GET /credit-history/{id}
-           └─ declined → backend POST /credit-applications {status: rejected}
+           │     └─> backend GET /credit-history/{id} → summary
+           └─> backend POST /api/credit-applications {decision, ...} → application_id
 клиент жмёт «Получить деньги» → retail POST /api/credit-accept {offer_id}
-           └─> backend POST /credit-applications {status: approved, rate_pct}
-                 → backend зачисляет деньги, операция loan_disbursement
-retail GET /api/credit-applications/{id} → backend GET /credit-applications?client_id=
+           ├─> backend POST /api/credit-disburse {application_id, ...}
+           └─> backend PATCH /api/credit-applications/{id} {status: accepted}
+retail GET /api/credit-applications/{client_id} → backend GET /api/credit-applications/{client_id}
 ```
 
 **Важно для cib:** cib только возвращает решение и **ничего не пишет в
-backend**. Заявку записывает retail — после согласия клиента. Иначе деньги
-уйдут без согласия или зачислятся дважды.
+backend**. Заявку и выдачу записывает retail — после согласия клиента.
 
 ## Статус задач
 
 | Задача | Блок | Статус |
 |---|---|---|
-| R1-R1 Вкладка «Кредит», пресеты под сегмент, решение, «Получить деньги», история | retail | ✅ готово (dev) |
-| R1-B1 `GET /credit-history/{id}` со сводкой | backend | ✅ готово (main) |
-| R1-B2/B3 Заявки + зачисление при `approved` | backend | ✅ готово (main) |
-| R1-B4 Нагрузка только по непогашенным кредитам | backend | ⏳ сделать |
-| R1-B5 Признак зарплатного клиента | backend | ⏳ сделать |
-| R1-B6 Защита от двойного зачисления | backend | ⏳ сделать |
-| R1-C1 `POST /api/decision` по политике | cib | ⏳ сделать — **главный блокер релиза** |
-| R1-C2 Продукт в каталоге | cib | ⏳ сделать |
+| R1-R1 Вкладка «Кредит», решение, «Получить деньги», история | retail | ✅ main (12:25) |
+| R1-B1 `/credit-history` со `summary` | backend | ✅ dev |
+| R1-B2 `/api/credit-disburse` без двойного зачисления | backend | ✅ dev |
+| R1-B3 `/api/credit-applications` | backend | ✅ dev |
+| R1-B5 `is_salary_client`, `avg_salary_rub` | backend | ✅ dev |
+| R1-B6 защита от двойного зачисления | backend | ✅ dev (через `application_id`) |
+| R1-B4 нагрузка только по непогашенным кредитам | backend | ✅ dev |
+| Выпуск dev → main (retail «Продукты», «Мои кредиты»; backend R1-B4…B6) | backend (Евгения, release_to_main.sh) | ⏳ **сейчас** |
+| R2-B2 вклады `POST /api/deposits` | backend | ⏳ **следующая задача backend** |
+| R2-R2 «Мои кредиты», вкладка «Продукты» | retail | ✅ готово (dev) |
+| R1-C1 `POST /api/decision` по политике | cib | ⏳ **блокер — сделать первым**; инструкция по полям — в backend/CONTRACT.md «Для cib — коротко» |
+| R1-C2 продукт в каталоге | cib | ⏳ сделать |
 
 ## Задачи backend (по порядку)
 
-### R1-B4. Нагрузка только по кредитам, срок которых ещё идёт
-В `GET /credit-history/{id}` поля `active_count`, `active_principal_rub`,
-`active_monthly_payment_rub` считать только по `status == "active"`, у которых
-`opened_at + term_months` ≥ сегодня. В seed 374 из 629 «active» записей уже
-прошли срок — по сути погашены; сейчас из-за них у 24% клиентов нагрузка выше
-дохода (пример: c-01001 сейчас 81 084 ₽/мес, должно быть 10 269 ₽/мес).
-Добавить в ответ `has_active_overdue` — есть ли среди учтённых кредитов
-`overdue_days_max > 0`. Кредиты, выданные через заявки, учитываются всегда.
-
-### R1-B5. Зарплатный клиент
-В `GET /credit-history/{id}` добавить `is_salary_client` (есть транзакции
-`type == "salary"`) и `avg_salary_rub` (среднее по ним, round; 0 если нет).
-
-### R1-B6. Без двойного зачисления
-`POST /credit-applications` принимает необязательный `idempotency_key`; повтор
-с тем же ключом возвращает ту же заявку и деньги второй раз не зачисляет.
+R1-B1…B6 выполнены (12:30). Сейчас: выпуск dev → main, затем **R2-B2** (вклады,
+см. «Дальше — релиз 2»), затем R2-B1.
 
 ## Задачи cib (по порядку)
 
@@ -145,10 +199,11 @@ reason, alternative, risk_group}`; `decision` ∈ `approved | counter | declined
 
 Алгоритм (кредитная политика CRO, параметры — константы):
 1. `GET {BACKEND}/credit-history/{client_id}` (таймаут 2 с). Берём:
-   `debt = active_monthly_payment_rub`;
-   `current_overdue = has_active_overdue` (если поля ещё нет — есть ли в `items`
-   `status == "active"` со сроком, который ещё идёт, и `overdue_days_max > 0`);
-   `salary = is_salary_client` (если поля нет — `false`).
+   `debt = summary.monthly_debt_payment_rub`;
+   `current_overdue = summary.has_active_overdue`;
+   `salary = summary.is_salary_client`
+   (если `summary` нет — онлайн старый backend — `debt = active_monthly_payment_rub`,
+   `current_overdue = false`, `salary = false`).
    Ошибка/404 → `debt = 0`, `current_overdue = false`, `salary = false`.
 2. Стоп-факторы → `declined`: `risk_score > 0.60`; `current_overdue`;
    `risk_score > 0.50` и `has_overdue_history`. Нет истории — не отказ;
@@ -175,6 +230,25 @@ reason, alternative, risk_group}`; `decision` ∈ `approved | counter | declined
 ### R1-C2. Каталог
 В `GET /products` добавить `{id: "consumer_credit", kind: "credit",
 name: "Кредит наличными", rate_pct: 15.5, segments: ["mass","mass_affluent"]}`.
+
+## Дальше — релиз 2 (брать, когда закончены задачи релиза 1)
+
+Цель: клиент видит готовое персональное предложение ещё до заявки.
+
+- **R2-C1 (cib).** `GET /api/offers/{client_id}` → `{preapproved: bool,
+  max_amount_rub, rate_pct, term_months: 36, monthly_payment_rub, reason}` —
+  та же политика R1-C1 с суммой = максимальный лимит группы (после PTI).
+  Для отказных — `preapproved: false` и `reason`.
+- **R2-B1 (backend).** `GET /clients/{id}/profile` → карточка + `summary` из
+  `/credit-history` + `last_salary_at` одним ответом (чтобы cib делал один запрос).
+- **R2-B2 (backend).** `POST /api/deposits` `{client_id, product_id, amount_rub,
+  term_months, rate_pct}` → списать сумму с баланса, создать вклад, транзакция
+  `deposit_open` (минус); `422`, если денег не хватает. `GET /api/deposits/{client_id}`
+  — вклады клиента. Ответ POST: `{status: "ok", deposit_id, new_balance_rub}`.
+- **R2-C2 (cib).** Ставка вклада по сегменту: mass_affluent +0.5 п.п.,
+  premium/private +1.0 п.п.; в `/products` поля `rate_pct`, `min_amount_rub`, `segments`.
+- **R2-R1 (retail).** Баннер «Вам одобрено до N ₽» на главном экране,
+  кнопка ведёт в «Кредит» с подставленной суммой.
 
 ## Приёмка (seed, срок 24 мес, на 9 октября 2026, после R1-B4/B5)
 
