@@ -158,6 +158,31 @@
     .alert.info  { background: #f0e8d0; color: var(--warn); }
     .alert.error { background: #f4dfd6; color: var(--bad); }
 
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip {
+      padding: 7px 12px; border: 1px solid var(--rule); border-radius: 999px;
+      background: var(--surface); font-family: inherit; font-size: 13px;
+      color: var(--text); cursor: pointer;
+    }
+    .chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+    .hint { font-size: 12px; color: var(--text-2); margin: 4px 0 14px; line-height: 1.5; }
+    .seg-badge {
+      display: inline-block; font-size: 11px; padding: 4px 10px; border-radius: 999px;
+      background: var(--raiff-soft); color: var(--text); margin-bottom: 10px;
+    }
+    .offer { margin-top: 18px; border: 1px solid var(--rule); border-radius: 10px; padding: 16px; }
+    .offer .head { font-weight: 600; font-size: 15px; margin-bottom: 10px; }
+    .offer .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+    .offer .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+    .offer .v { font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
+    .offer .why { margin-top: 12px; font-size: 13px; color: var(--text-2); line-height: 1.5; }
+    .offer.approved { border-color: var(--good); }
+    .offer.approved .head { color: var(--good); }
+    .offer.counter { border-color: var(--warn); }
+    .offer.counter .head { color: var(--warn); }
+    .offer.declined { border-color: var(--bad); }
+    .offer.declined .head { color: var(--bad); }
+
     .client-picker { padding: 14px 22px; border-bottom: 1px solid var(--rule); }
     .client-picker label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
     .client-picker select { width: 100%; margin-top: 4px; padding: 8px 10px;
@@ -184,6 +209,29 @@
 
     <div class="tabs">
       <button class="tab active" data-tab="transfers">Переводы</button>
+      <button class="tab" data-tab="credit">Кредит</button>
+    </div>
+
+    <div class="tab-pane" data-pane="credit">
+      <div class="seg-badge" id="seg-badge"></div>
+      <div class="section-title">Кредит наличными</div>
+      <form id="credit-form" autocomplete="off">
+        <div class="form-row">
+          <label>Сумма, ₽</label>
+          <input name="amount" type="number" min="1000" step="1000" placeholder="0" />
+          <div class="chips" id="amount-chips"></div>
+        </div>
+        <div class="form-row">
+          <label>Срок</label>
+          <div class="chips" id="term-chips"></div>
+          <input name="term" type="hidden" />
+        </div>
+        <div class="hint" id="credit-hint"></div>
+        <button class="btn primary" type="submit">Получить решение</button>
+      </form>
+      <div id="credit-result"></div>
+      <div class="section-title" style="margin-top:24px">Мои заявки</div>
+      <div id="credit-history" class="tx-list"></div>
     </div>
 
     <div class="tab-pane show" data-pane="transfers">
@@ -247,6 +295,8 @@
       balanceV.textContent = fmt.format(+opt.dataset.balance || 0);
       topbarWho.textContent = opt.dataset.name;
       loadTx(opt.value);
+      loadCreditPresets(opt.value);
+      loadCreditHistory(opt.value);
     }
     sel.addEventListener("change", onPickClient);
 
@@ -338,6 +388,152 @@
       } catch(e) {
         transferResult.innerHTML =
           `<div class="alert error">сервер не ответил</div>`;
+      }
+    });
+
+    // ---- кредит ----
+    const creditForm = document.getElementById("credit-form");
+    const creditResult = document.getElementById("credit-result");
+    const amountChips = document.getElementById("amount-chips");
+    const termChips = document.getElementById("term-chips");
+    const segBadge = document.getElementById("seg-badge");
+    const creditHint = document.getElementById("credit-hint");
+    const SEG_HINT = {
+      mass: "Решение онлайн за минуту, без справок о доходе. Покажем платёж и полную стоимость заранее.",
+      mass_affluent: "Для вас ставка и сумма подбираются по вашему профилю — больше лимит, лучше условия.",
+    };
+
+    function shortRub(n) {
+      return n >= 1e6 ? (n / 1e6).toString().replace(".", ",") + " млн ₽"
+                      : fmt.format(n / 1000) + " тыс ₽";
+    }
+    function termLabel(m) { return m % 12 === 0 ? `${m / 12} ${m === 12 ? "год" : (m <= 48 ? "года" : "лет")}` : `${m} мес`; }
+
+    function pickChip(container, value) {
+      container.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c.dataset.v == value));
+    }
+
+    async function loadCreditPresets(clientId) {
+      creditResult.innerHTML = "";
+      let p;
+      try {
+        const r = await fetch(`/api/credit-presets/${clientId}`);
+        p = r.ok ? await r.json() : null;
+      } catch(e) { p = null; }
+      if (!p) p = { segment: "mass", segment_label: "", amounts: [50000, 150000, 300000],
+                    terms: [12, 24, 36], default_amount: 150000, default_term: 24 };
+      segBadge.textContent = p.segment_label ? `Ваш пакет: ${p.segment_label}` : "";
+      segBadge.style.display = p.segment_label ? "inline-block" : "none";
+      creditHint.textContent = SEG_HINT[p.segment] || SEG_HINT.mass;
+      amountChips.innerHTML = p.amounts.map(a =>
+        `<button type="button" class="chip" data-v="${a}">${shortRub(a)}</button>`).join("");
+      termChips.innerHTML = p.terms.map(t =>
+        `<button type="button" class="chip" data-v="${t}">${termLabel(t)}</button>`).join("");
+      creditForm.amount.value = p.default_amount;
+      creditForm.term.value = p.default_term;
+      pickChip(amountChips, p.default_amount);
+      pickChip(termChips, p.default_term);
+    }
+
+    amountChips.addEventListener("click", ev => {
+      const c = ev.target.closest(".chip"); if (!c) return;
+      creditForm.amount.value = c.dataset.v; pickChip(amountChips, c.dataset.v);
+    });
+    termChips.addEventListener("click", ev => {
+      const c = ev.target.closest(".chip"); if (!c) return;
+      creditForm.term.value = c.dataset.v; pickChip(termChips, c.dataset.v);
+    });
+    creditForm.amount.addEventListener("input", () => pickChip(amountChips, creditForm.amount.value));
+
+    function renderOffer(d) {
+      const head = {
+        approved: "Кредит одобрен",
+        counter:  "Можем одобрить на других условиях",
+        declined: "Сейчас не можем одобрить",
+      }[d.decision];
+      if (!head) {
+        return `<div class="alert info">${d.message || "Заявка принята. Решение пришлём в течение нескольких минут."}</div>`;
+      }
+      const cells = [];
+      if (d.amount_rub)          cells.push(["Сумма", fmt.format(d.amount_rub) + " ₽"]);
+      if (d.rate_pct != null)    cells.push(["Ставка", String(d.rate_pct).replace(".", ",") + "% годовых"]);
+      if (d.term_months)         cells.push(["Срок", termLabel(d.term_months)]);
+      if (d.monthly_payment_rub) cells.push(["Платёж в месяц", fmt.format(d.monthly_payment_rub) + " ₽"]);
+      if (d.total_cost_rub)      cells.push(["Всего выплатите", fmt.format(d.total_cost_rub) + " ₽"]);
+      const grid = d.decision === "declined" ? "" :
+        `<div class="grid">${cells.map(([k, v]) => `<div><div class="k">${k}</div><div class="v">${v}</div></div>`).join("")}</div>`;
+      const why = [d.reason, d.alternative].filter(Boolean).join(" ");
+      const take = d.decision === "declined" ? "" :
+        `<button type="button" class="btn primary" id="credit-accept" style="margin-top:14px">Получить ${fmt.format(d.amount_rub)} ₽</button>`;
+      return `<div class="offer ${d.decision}"><div class="head">${head}</div>${grid}${why ? `<div class="why">${why}</div>` : ""}${take}</div>`;
+    }
+
+    let lastOffer = null;
+    creditResult.addEventListener("click", async ev => {
+      if (!ev.target.closest("#credit-accept") || !lastOffer) return;
+      const btn = ev.target.closest("#credit-accept");
+      btn.disabled = true; btn.textContent = "Оформляем…";
+      const o = lastOffer;
+      try {
+        const r = await fetch("/api/credit-accept", {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ client_id: o.client_id, amount_rub: o.amount_rub, rate_pct: o.rate_pct,
+                                 term_months: o.term_months, application_id: o.application_id }),
+        });
+        const d = await r.json();
+        if (r.ok && d.status === "ok") {
+          if (d.new_balance_rub != null) setBalance(d.new_balance_rub);
+          creditResult.innerHTML = `<div class="alert ok">${d.message} +${fmt.format(d.amount_rub)} ₽</div>`;
+          loadTx(o.client_id);
+        } else {
+          creditResult.innerHTML = `<div class="alert info">${d.message || d.detail || "Заявка принята"}</div>`;
+        }
+        lastOffer = null;
+        loadCreditHistory(o.client_id);
+      } catch(e) {
+        btn.disabled = false; btn.textContent = "Попробовать ещё раз";
+      }
+    });
+
+    const creditHistory = document.getElementById("credit-history");
+    const DEC_LABEL = { approved: "Одобрено", counter: "Встречное", declined: "Отказ", pending: "На рассмотрении" };
+    async function loadCreditHistory(clientId) {
+      try {
+        const r = await fetch(`/api/credit-applications/${clientId}`);
+        const d = await r.json();
+        const items = d.items || [];
+        creditHistory.innerHTML = items.length ? items.map(a => `<div class="tx-row">
+            <div><div class="desc">${fmt.format(a.amount_rub)} ₽ · ${termLabel(a.term_months)}</div>
+            <div class="ts">${(a.created_at || "").replace("T", " ").slice(0, 16)}</div></div>
+            <div class="amt">${a.status === "accepted" ? "Выдан" : (DEC_LABEL[a.decision] || a.decision)}</div>
+          </div>`).join("") : `<div class="empty">Заявок пока нет</div>`;
+      } catch(e) { creditHistory.innerHTML = `<div class="empty">Заявок пока нет</div>`; }
+    }
+
+    creditForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const opt = sel.selectedOptions[0];
+      if (!opt) return;
+      const amount = +creditForm.amount.value;
+      const term = +creditForm.term.value;
+      if (!(amount > 0) || !(term > 0)) {
+        creditResult.innerHTML = `<div class="alert error">Укажите сумму и срок</div>`;
+        return;
+      }
+      creditResult.innerHTML = `<div class="alert info">Считаем решение…</div>`;
+      try {
+        const r = await fetch("/api/credit-apply", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ client_id: opt.value, amount_rub: amount, term_months: term }),
+        });
+        const d = await r.json();
+        lastOffer = (r.ok && (d.decision === "approved" || d.decision === "counter")) ? d : null;
+        if (r.ok) loadCreditHistory(opt.value);
+        creditResult.innerHTML = r.ok ? renderOffer(d)
+          : `<div class="alert error">${d.detail || "Не получилось отправить заявку"}</div>`;
+      } catch(e) {
+        creditResult.innerHTML = `<div class="alert error">Сервис временно недоступен, попробуйте через минуту</div>`;
       }
     });
 
