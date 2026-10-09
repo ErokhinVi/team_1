@@ -77,7 +77,7 @@ c-01017 A 16.4% 34 408 ₽; c-01011 B 18.4% 35 082 ₽). Если у cib не с
 ### GET /health
 Проверка живости. Возвращает `{status, team, block, commit, clients_loaded,
 transactions_loaded, credit_history_loaded, credit_applications}`
-(`credit_applications` — заявки обоих вариантов), `deposits`.
+(`credit_applications` — заявки обоих вариантов), `deposits`, `credit_payments`.
 
 ### GET /clients
 Список клиентов команды. Параметры запроса (все опциональные):
@@ -172,6 +172,32 @@ products, risk_score, has_overdue_history, ...`) плюс
 Пример (c-01002): `segment "mass", income_rub 40425, risk_score 0.286,
 summary {active_count 0, monthly_debt_payment_rub 0, is_salary_client true,
 avg_salary_rub 40425, ...}, last_salary_at "2026-03-01"`.
+
+## Релиз 3 — погашение кредита (R3-B1, по ТЗ retail)
+
+### Остаток долга в `GET /credit-history/{client_id}`
+У каждого кредита со `status: "active"` в `items` теперь есть
+`outstanding_rub` (остаток долга) и `monthly_payment_rub` (аннуитетный платёж).
+Остаток: для кредитов из исходных данных — по графику аннуитета на сегодня
+(если срок истёк — 0); для выданных через наш банк — сумма кредита; в обоих
+случаях минус платежи через `POST /api/credit-payments`.
+Пример c-01000: `ch-000002` (149 669 ₽, 60 мес, 21.54%, с 2022-11-18) →
+`outstanding_rub 50294, monthly_payment_rub 4095`.
+
+### POST /api/credit-payments
+Вход `{client_id, credit_id, amount_rub, idempotency_key?}`. Списывает
+сумму со счёта, уменьшает остаток, добавляет транзакцию `credit_payment`
+(с минусом). Если остаток стал 0 — кредит `closed_clean` (+`closed_at`) и
+перестаёт учитываться в нагрузке (`summary.monthly_debt_payment_rub`).
+Ответ `201`: `{status: "ok", payment_id ("pay-000001"), credit_id, amount_rub,
+new_balance_rub, outstanding_rub, closed: bool, tx_id}`.
+Ошибки: `404` — нет клиента или у клиента нет такого кредита; `422` — не
+хватает денег, сумма больше остатка, кредит уже закрыт или выплачен по
+графику, неверная сумма. Повтор с тем же `idempotency_key` второй раз не
+списывает (возвращает тот же ответ).
+
+### GET /api/credit-payments/{client_id}
+Платежи клиента по кредитам, новые сверху: `{total, items: [ответ POST + ts]}`.
 
 ## Кредиты — основная схема (ТЗ retail v2)
 
