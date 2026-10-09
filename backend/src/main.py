@@ -82,7 +82,7 @@ async def health() -> dict:
             "commit": COMMIT, "clients_loaded": len(_clients),
             "transactions_loaded": len(_transactions),
             "credit_history_loaded": len(_credit_history),
-            "credit_applications": len(_applications)}
+            "credit_applications": len(_applications) + len(_r1_applications)}
 
 
 @app.get("/clients")
@@ -184,12 +184,17 @@ def _now_iso() -> str:
     return datetime.now().replace(microsecond=0).isoformat()
 
 
+def _annuity_exact(principal: float, rate_pct: float, months: int) -> float:
+    """Monthly annuity payment P = S*m / (1 - (1+m)^-n), m = rate/1200."""
+    m = rate_pct / 1200
+    if m <= 0:
+        return principal / months
+    return principal * m / (1 - (1 + m) ** -months)
+
+
 def _annuity_payment(principal: float, rate_pct: float, months: int) -> int:
     """Monthly annuity payment, rounded to whole roubles."""
-    r = rate_pct / 1200
-    if r <= 0:
-        return round(principal / months)
-    return round(principal * r / (1 - (1 + r) ** -months))
+    return round(_annuity_exact(principal, rate_pct, months))
 
 
 def _credit_summary(client_id: str) -> dict[str, Any]:
@@ -197,6 +202,18 @@ def _credit_summary(client_id: str) -> dict[str, Any]:
                    key=lambda r: r.get("opened_at", ""), reverse=True)
     active = [r for r in items if r.get("status") == "active"]
     max_overdue = max((r.get("overdue_days_max", 0) for r in items), default=0)
+    salaries = [t["amount_rub"] for t in _transactions
+                if t["client_id"] == client_id and t.get("type") == "salary"]
+    summary = {
+        "active_count": len(active),
+        "max_overdue_days": max_overdue,
+        "has_active_overdue": any(r.get("overdue_days_max", 0) > 0 for r in active),
+        "monthly_debt_payment_rub": round(sum(
+            _annuity_exact(r["principal_rub"], r["rate_pct"], r["term_months"])
+            for r in active)),
+        "is_salary_client": bool(salaries),
+        "avg_salary_rub": round(sum(salaries) / len(salaries)) if salaries else 0,
+    }
     return {
         "client_id": client_id,
         "total": len(items),
@@ -211,6 +228,7 @@ def _credit_summary(client_id: str) -> dict[str, Any]:
         "max_overdue_days": max_overdue,
         "has_overdue": max_overdue > 0,
         "items": items,
+        "summary": summary,
     }
 
 
@@ -374,4 +392,155 @@ async def decide_credit_application(
         raise HTTPException(status_code=404, detail=f"заявка {application_id} не найдена")
     _decide(a, payload.get("status"), payload.get("rate_pct"),
             payload.get("reason"), payload.get("decided_by"))
+    return a
+
+
+# ---------------------------------------------------------------------------
+# Release 1 (spec from retail, retail/CONTRACT.md): /api/credit-disburse and
+# /api/credit-applications. Invalid input -> 422 with a Russian `detail`.
+# ---------------------------------------------------------------------------
+
+R1_DECISIONS = {"approved", "counter", "declined", "pending"}
+R1_CLIENT_STATUSES = {"accepted", "rejected_by_client"}
+_r1_applications: dict[str, dict[str, Any]] = {}
+_r1_disbursements: dict[str, dict[str, Any]] = {}  # application_id -> response
+
+
+def _r1_int(payload: dict, key: str, lo: int, hi: int, label: str) -> int:
+    try:
+        v = int(payload.get(key))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail=f"{label} ({key}) должно быть целым числом")
+    if not lo <= v <= hi:
+        raise HTTPException(status_code=422, detail=f"{label} ({key}) — от {lo} до {hi}")
+    return v
+
+
+def _r1_rate(payload: dict, required: bool) -> float | None:
+    raw = payload.get("rate_pct")
+    if raw is None and not required:
+        return None
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="ставка rate_pct должна быть числом")
+    if not 0 <= v <= 100:
+        raise HTTPException(status_code=422, detail="ставка rate_pct — от 0 до 100")
+    return v
+
+
+def _r1_client(payload: dict) -> dict[str, Any]:
+    cid = payload.get("client_id")
+    if not cid:
+        raise HTTPException(status_code=422, detail="укажи client_id")
+    c = _clients_by_id.get(cid)
+    if not c:
+        raise HTTPException(status_code=404, detail=f"клиент {cid} не найден")
+    return c
+
+
+@app.post("/api/credit-disburse")
+async def r1_credit_disburse(
+    payload: dict = Body(..., examples=[{
+        "client_id": "c-01003", "amount_rub": 150000, "rate_pct": 20.0,
+        "term_months": 24, "application_id": "app-000001",
+    }]),
+) -> dict:
+    """R1-B2. Issue a cash loan: money to the account, a transaction, a new
+    active credit. Idempotent per application_id."""
+    client = _r1_client(payload)
+    app_id = payload.get("application_id")
+    if app_id and app_id in _r1_disbursements:
+        return _r1_disbursements[app_id]
+    amount = _r1_int(payload, "amount_rub", 1, 100_000_000, "сумма")
+    term = _r1_int(payload, "term_months", 1, 360, "срок")
+    rate = _r1_rate(payload, required=True)
+
+    now = _now_iso()
+    client["balance_rub"] += amount
+    tx = {
+        "id": f"t-{100000 + len(_transactions) + 1:08d}",
+        "client_id": client["id"], "type": "credit_disbursement", "amount_rub": amount,
+        "ts": now, "counterparty": "Кредит наличными",
+    }
+    _transactions.append(tx)
+    credit = {
+        "id": f"ch-{len(_credit_history) + 1:06d}",
+        "client_id": client["id"], "product": "consumer_credit",
+        "principal_rub": amount, "term_months": term, "rate_pct": rate,
+        "opened_at": now[:10], "status": "active", "overdue_days_max": 0,
+    }
+    if app_id:
+        credit["application_id"] = app_id
+    _add_credit_record(credit)
+    products = client.setdefault("products", [])
+    if "consumer_credit" not in products:
+        products.append("consumer_credit")
+
+    resp = {"status": "ok", "client_id": client["id"], "credit_id": credit["id"],
+            "tx_id": tx["id"], "amount_rub": amount, "new_balance_rub": client["balance_rub"]}
+    if app_id:
+        _r1_disbursements[app_id] = resp
+        if app_id in _r1_applications:
+            _r1_applications[app_id]["credit_id"] = credit["id"]
+    return resp
+
+
+@app.post("/api/credit-applications")
+async def r1_create_application(
+    payload: dict = Body(..., examples=[{
+        "client_id": "c-01003", "amount_rub": 150000, "term_months": 24,
+        "decision": "approved", "rate_pct": 20.0, "approved_amount_rub": 150000,
+        "monthly_payment_rub": 7634, "reason": "Кредит одобрен",
+    }]),
+) -> dict:
+    """R1-B3. Save an application together with cib's decision."""
+    client = _r1_client(payload)
+    amount = _r1_int(payload, "amount_rub", 1, 100_000_000, "сумма")
+    term = _r1_int(payload, "term_months", 1, 360, "срок")
+    decision = payload.get("decision")
+    if decision not in R1_DECISIONS:
+        raise HTTPException(status_code=422,
+                            detail=f"decision — одно из {sorted(R1_DECISIONS)}")
+    rec: dict[str, Any] = {
+        "application_id": f"app-{len(_r1_applications) + 1:06d}",
+        "created_at": _now_iso(),
+        "client_id": client["id"], "amount_rub": amount, "term_months": term,
+        "decision": decision, "rate_pct": _r1_rate(payload, required=False),
+        "approved_amount_rub": payload.get("approved_amount_rub"),
+        "monthly_payment_rub": payload.get("monthly_payment_rub"),
+        "reason": payload.get("reason"),
+        "status": None, "updated_at": None,
+    }
+    for k, v in payload.items():  # keep any extra fields retail sends (e.g. product)
+        rec.setdefault(k, v)
+    _r1_applications[rec["application_id"]] = rec
+    return rec
+
+
+@app.get("/api/credit-applications/{client_id}")
+async def r1_list_applications(client_id: str) -> dict:
+    """R1-B3. Client's applications, newest first."""
+    if client_id not in _clients_by_id:
+        raise HTTPException(status_code=404, detail=f"клиент {client_id} не найден")
+    items = [a for a in _r1_applications.values() if a["client_id"] == client_id]
+    items.reverse()
+    return {"total": len(items), "items": items}
+
+
+@app.patch("/api/credit-applications/{application_id}")
+async def r1_update_application(
+    application_id: str,
+    payload: dict = Body(..., examples=[{"status": "accepted"}]),
+) -> dict:
+    """R1-B3. Client accepted or declined the offer."""
+    a = _r1_applications.get(application_id)
+    if not a:
+        raise HTTPException(status_code=404, detail=f"заявка {application_id} не найдена")
+    status = payload.get("status")
+    if status not in R1_CLIENT_STATUSES:
+        raise HTTPException(status_code=422,
+                            detail=f"status — одно из {sorted(R1_CLIENT_STATUSES)}")
+    a["status"] = status
+    a["updated_at"] = _now_iso()
     return a
