@@ -522,6 +522,7 @@
           creditResult.innerHTML = `<div class="alert ok">${d.message} +${fmt.format(d.amount_rub)} ₽</div>`;
           loadTx(o.client_id);
           loadMyCredits(o.client_id);
+          offerBanner.style.display = "none";
         } else {
           creditResult.innerHTML = `<div class="alert info">${d.message || d.detail || "Заявка принята"}</div>`;
         }
@@ -585,20 +586,18 @@
         preOffer = d;
         const rate = d.rate_pct != null ? ` под ${String(d.rate_pct).replace(".", ",")}%` : "";
         offerBanner.innerHTML = `<div><div class="t">Вам одобрено до ${fmt.format(d.max_amount_rub)} ₽${rate}</div>
-          <div class="s">Решение уже готово — деньги на счёт в два нажатия</div></div><div class="go">Получить →</div>`;
+          <div class="s">Решение готово: ${d.offer && d.offer.monthly_payment_rub ? fmt.format(d.offer.monthly_payment_rub) + " ₽/мес · " : ""}деньги на счёт в два касания</div></div><div class="go">Получить →</div>`;
         offerBanner.style.display = "flex";
       } catch(e) {}
     }
     offerBanner.addEventListener("click", () => {
-      if (!preOffer) return;
+      if (!preOffer || !preOffer.offer) return;
       openTab("credit");
-      creditForm.amount.value = preOffer.max_amount_rub;
-      pickChip(amountChips, preOffer.max_amount_rub);
-      if (preOffer.term_months) {
-        const t = termChips.querySelector(`.chip[data-v="${preOffer.term_months}"]`);
-        if (t) { creditForm.term.value = preOffer.term_months; pickChip(termChips, preOffer.term_months); }
-      }
-      creditForm.requestSubmit();
+      lastOffer = preOffer.offer;
+      creditForm.amount.value = preOffer.offer.amount_rub; pickChip(amountChips, preOffer.offer.amount_rub);
+      creditForm.term.value = preOffer.offer.term_months; pickChip(termChips, preOffer.offer.term_months);
+      creditResult.innerHTML = renderOffer(preOffer.offer);
+      creditResult.scrollIntoView({ behavior: "smooth", block: "center" });
     });
 
     // ---- мои кредиты ----

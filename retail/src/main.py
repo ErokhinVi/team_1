@@ -275,6 +275,14 @@ async def credit_accept(payload: dict) -> dict:
     offer = OFFERS.get(offer_id)
     if not offer:
         raise HTTPException(status_code=422, detail="Предложение устарело — запросите решение ещё раз")
+    if offer.get("preapproved") and not offer.get("application_id"):
+        r0 = await _backend_post("/api/credit-applications", {
+            "client_id": offer["client_id"], "amount_rub": offer["amount_rub"],
+            "term_months": offer["term_months"], "decision": "approved",
+            "rate_pct": offer["rate_pct"], "approved_amount_rub": offer["amount_rub"],
+            "monthly_payment_rub": offer.get("monthly_payment_rub"), "reason": offer.get("reason")})
+        if _ok(r0):
+            offer["application_id"] = r0.json().get("application_id")
     app_id = offer.get("application_id") or f"offer-{offer_id}"
     r = await _backend_post("/api/credit-disburse", {
         "client_id": offer["client_id"], "amount_rub": offer["amount_rub"],
@@ -448,19 +456,58 @@ async def my_credits(client_id: str) -> dict:
 
 @app.get("/api/offer/{client_id}")
 async def offer(client_id: str) -> dict:
+    """Two-tap credit: pre-ask cib for a decision on a ready amount for this client.
+
+    1) cib GET /api/offers/{id} (R2-C1) if cib has it; 2) otherwise ask cib
+    POST /credit/decide for the segment's preset amounts (largest first). The
+    decision stays with cib; retail only asks in advance and keeps the offer.
+    """
+    try:
+        client = await _backend_get(f"/clients/{client_id}")
+    except HTTPException:
+        return {"preapproved": False}
+    seg = client.get("segment", "mass")
+    preset = SEGMENT_PRESETS.get(seg, DEFAULT_PRESET)
+    term = 36 if 36 in preset["terms"] else preset["default_term"]
+    found = None
     try:
         async with httpx.AsyncClient(timeout=5.0) as http:
             r = await http.get(f"{CIB_URL}/api/offers/{client_id}")
         if r.status_code == 200:
             d = r.json()
-            if d.get("preapproved") and (d.get("max_amount_rub") or 0) >= 10000:
-                return {"preapproved": True, "max_amount_rub": d["max_amount_rub"],
-                        "rate_pct": d.get("rate_pct"), "term_months": d.get("term_months"),
-                        "monthly_payment_rub": d.get("monthly_payment_rub")}
+            if d.get("preapproved") and (d.get("max_amount_rub") or 0) >= 30000:
+                found = {"decision": "approved", "amount_rub": d["max_amount_rub"],
+                         "rate_pct": d.get("rate_pct"), "term_months": d.get("term_months") or term,
+                         "monthly_payment_rub": d.get("monthly_payment_rub"), "reason": d.get("reason")}
     except (httpx.HTTPError, ValueError):
         pass
-    return {"preapproved": False}
-
+    if found is None:
+        for amount in sorted(preset["amounts"], reverse=True)[:2]:
+            d = await _cib_decide({"client_id": client_id, "amount_rub": amount, "term_months": term,
+                                   "product": "consumer_credit"})
+            if d and d.get("decision") in ("approved", "counter") and (d.get("amount_rub") or 0) >= 30000:
+                found = d
+                break
+            if d is None:
+                break
+    if not found or found.get("rate_pct") is None:
+        return {"preapproved": False}
+    amount = float(found["amount_rub"])
+    term_m = int(found.get("term_months") or term)
+    rate = float(found["rate_pct"])
+    pay = round(float(found.get("monthly_payment_rub") or _annuity(amount, rate, term_m)))
+    out = {"client_id": client_id, "segment": seg, "product": "consumer_credit",
+           "decision": "approved", "amount_rub": amount, "rate_pct": rate, "term_months": term_m,
+           "monthly_payment_rub": pay, "total_cost_rub": round(float(found.get("total_payment_rub") or pay * term_m)),
+           "reason": found.get("reason") or "Предложение одобрено заранее по вашему профилю.",
+           "requested_amount_rub": amount, "requested_term_months": term_m}
+    offer_id = uuid.uuid4().hex[:12]
+    if len(OFFERS) >= MAX_OFFERS:
+        OFFERS.pop(next(iter(OFFERS)))
+    OFFERS[offer_id] = {**{k: out.get(k) for k in ("client_id", "amount_rub", "rate_pct", "term_months",
+                                                   "reason", "product")},
+                        "application_id": None, "preapproved": True, "monthly_payment_rub": pay}
+    return {"preapproved": True, "offer_id": offer_id, "max_amount_rub": amount, "offer": {**out, "offer_id": offer_id}}
 
 @app.get("/api/my-deposits/{client_id}")
 async def my_deposits(client_id: str) -> dict:
