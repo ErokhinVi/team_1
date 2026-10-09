@@ -191,6 +191,12 @@
       background: var(--bg); font-family: inherit; font-size: 14px; }
     .product .row .btn { width: auto; padding: 9px 14px; }
 
+    .offer-banner { margin: 0; padding: 14px 22px; background: var(--raiff); color: var(--text);
+      display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; }
+    .offer-banner .t { font-weight: 600; font-size: 14px; }
+    .offer-banner .s { font-size: 12px; opacity: 0.75; margin-top: 2px; }
+    .offer-banner .go { font-weight: 600; font-size: 13px; white-space: nowrap; }
+
     .client-picker { padding: 14px 22px; border-bottom: 1px solid var(--rule); }
     .client-picker label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
     .client-picker select { width: 100%; margin-top: 4px; padding: 8px 10px;
@@ -209,6 +215,8 @@
       <div class="l">остаток на счёте</div>
       <div class="v"><span id="balance-v">—</span><span class="cur">₽</span></div>
     </div>
+
+    <div class="offer-banner" id="offer-banner" style="display:none"></div>
 
     <div class="client-picker">
       <label>Профиль</label>
@@ -316,6 +324,7 @@
       loadCreditHistory(opt.value);
       loadProducts(opt.value);
       loadMyCredits(opt.value);
+      loadOffer(opt.value);
     }
     sel.addEventListener("change", onPickClient);
 
@@ -553,6 +562,34 @@
       } catch(e) {
         creditResult.innerHTML = `<div class="alert error">Сервис временно недоступен, попробуйте через минуту</div>`;
       }
+    });
+
+    // ---- предодобренное предложение ----
+    const offerBanner = document.getElementById("offer-banner");
+    let preOffer = null;
+    async function loadOffer(clientId) {
+      offerBanner.style.display = "none"; preOffer = null;
+      try {
+        const r = await fetch(`/api/offer/${clientId}`);
+        const d = await r.json();
+        if (!d.preapproved) return;
+        preOffer = d;
+        const rate = d.rate_pct != null ? ` под ${String(d.rate_pct).replace(".", ",")}%` : "";
+        offerBanner.innerHTML = `<div><div class="t">Вам одобрено до ${fmt.format(d.max_amount_rub)} ₽${rate}</div>
+          <div class="s">Решение уже готово — деньги на счёт в два нажатия</div></div><div class="go">Получить →</div>`;
+        offerBanner.style.display = "flex";
+      } catch(e) {}
+    }
+    offerBanner.addEventListener("click", () => {
+      if (!preOffer) return;
+      openTab("credit");
+      creditForm.amount.value = preOffer.max_amount_rub;
+      pickChip(amountChips, preOffer.max_amount_rub);
+      if (preOffer.term_months) {
+        const t = termChips.querySelector(`.chip[data-v="${preOffer.term_months}"]`);
+        if (t) { creditForm.term.value = preOffer.term_months; pickChip(termChips, preOffer.term_months); }
+      }
+      creditForm.requestSubmit();
     });
 
     // ---- мои кредиты ----

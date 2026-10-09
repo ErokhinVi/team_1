@@ -399,3 +399,23 @@ async def my_credits(client_id: str) -> dict:
                       "overdue": (c.get("overdue_days_max") or 0) > 0})
     return {"total": len(items), "monthly_total_rub": sum(i["monthly_payment_rub"] for i in items),
             "items": items}
+
+
+# ---------------------------------------------------------------------------
+# Pre-approved offer banner (R2-R1): shows only when cib returns an offer.
+# ---------------------------------------------------------------------------
+
+@app.get("/api/offer/{client_id}")
+async def offer(client_id: str) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as http:
+            r = await http.get(f"{CIB_URL}/api/offers/{client_id}")
+        if r.status_code == 200:
+            d = r.json()
+            if d.get("preapproved") and (d.get("max_amount_rub") or 0) >= 10000:
+                return {"preapproved": True, "max_amount_rub": d["max_amount_rub"],
+                        "rate_pct": d.get("rate_pct"), "term_months": d.get("term_months"),
+                        "monthly_payment_rub": d.get("monthly_payment_rub")}
+    except (httpx.HTTPError, ValueError):
+        pass
+    return {"preapproved": False}
