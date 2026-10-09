@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Кредитный расчёт · Райф</title>
+  <style>
+    :root { font: 16px/1.5 system-ui, sans-serif; color: #24231e; background: #f4f2eb; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { background: #24231e; color: white; padding: 22px max(22px, calc((100vw - 1040px)/2)); }
+    header strong { color: #ffe600; font-size: 23px; margin-right: 20px; }
+    header span { font-size: 14px; color: #d3d0c5; }
+    main { max-width: 1084px; margin: auto; padding: 34px 22px 50px; }
+    h1 { font-size: clamp(28px, 4vw, 42px); line-height: 1.15; margin: 8px 0 14px; }
+    h2 { font-size: 22px; margin: 0 0 18px; }
+    p { margin: 0 0 18px; }
+    .muted { color: #676359; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 26px; }
+    .card { background: white; border: 1px solid #e4e0d5; border-radius: 18px; padding: 26px; }
+    label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 600; }
+    input { width: 100%; font: inherit; border: 1px solid #b8b4a7; border-radius: 8px; padding: 11px 13px; }
+    input:focus-visible, button:focus-visible { outline: 3px solid #8b6b00; outline-offset: 3px; }
+    .field { margin-bottom: 18px; }
+    small { display: block; color: #676359; margin-top: 5px; }
+    button { cursor: pointer; border: 0; border-radius: 9px; padding: 13px 16px; font: 600 15px system-ui; }
+    .primary { background: #ffe600; color: #24231e; }
+    .secondary { background: #24231e; color: white; }
+    button:disabled { opacity: .5; cursor: wait; }
+    .buttons { display: grid; gap: 10px; }
+    .summary { font-size: 34px; font-weight: 650; margin: 8px 0 20px; }
+    dl { margin: 18px 0; }
+    dl div { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid #eeece5; }
+    dt { color: #676359; }
+    dd { margin: 0; text-align: right; font-weight: 600; }
+    .note { padding: 13px 15px; background: #f4f2eb; border-radius: 9px; font-size: 14px; margin-top: 16px; }
+    .error { color: #982c1d; background: #fff0ec; }
+    .offer { border: 1px solid #dbc700; background: #fffde1; padding: 16px; border-radius: 10px; margin-top: 18px; }
+    .offer strong { font-size: 22px; }
+    .catalog { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+    .product { flex: 1 1 220px; padding: 18px; border-radius: 12px; background: white; border: 1px solid #e4e0d5; }
+    .catalog-section { margin-top: 34px; }
+    .tag { text-transform: uppercase; font-size: 11px; letter-spacing: .12em; color: #676359; }
+    [hidden] { display: none !important; }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } .card { padding: 20px; } header span { display: block; margin-top: 5px; } }
+  </style>
+</head>
+<body>
+  <header><strong>Райф</strong><span>Продукты и кредитные решения</span></header>
+  <main>
+    <div class="tag">Учебная версия</div>
+    <h1>Кредитный расчёт</h1>
+    <p class="muted">Узнайте платёж и получите предварительное решение по данным клиента.</p>
+    <div class="grid">
+      <section class="card">
+        <h2>Условия кредита</h2>
+        <form id="credit-form">
+          <div class="field"><label for="amount">Сумма, ₽</label><input id="amount" name="amount" type="number" min="30000" max="3000000" step="0.01" value="100000" required><small>От 30 000 до 3 000 000 ₽</small></div>
+          <div class="field"><label for="months">Срок, месяцев</label><input id="months" name="months" type="number" min="6" max="60" step="1" value="12" required><small>От 6 до 60 месяцев</small></div>
+          <div class="field"><label for="client">Номер клиента</label><input id="client" name="client" value="c-01000" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}" autocomplete="off"><small>Нужен для решения. Для расчёта платежа можно оставить пустым.</small></div>
+          <div class="buttons"><button class="primary" name="action" value="calculate" type="submit">Рассчитать платёж</button><button class="secondary" name="action" value="decide" type="submit">Проверить заявку клиента</button></div>
+        </form>
+        <div class="note">Ставка 19,9–24,9% годовых. Без комиссии и обязательного страхования. Это условия учебного продукта.</div>
+      </section>
+      <section class="card" id="result" aria-live="polite" aria-atomic="true">
+        <h2 id="result-title">Результат появится здесь</h2>
+        <p id="result-reason" class="muted">Расчёт не сохраняет заявку и не выдаёт деньги.</p>
+        <div id="result-values" hidden>
+          <small>Ежемесячный платёж</small><div class="summary" id="payment"></div>
+          <dl>
+            <div><dt>Ставка</dt><dd id="rate"></dd></div>
+            <div><dt>Последний платёж</dt><dd id="last-payment"></dd></div>
+            <div><dt>Всего к возврату</dt><dd id="total"></dd></div>
+            <div><dt>Переплата</dt><dd id="overpayment"></dd></div>
+          </dl>
+        </div>
+        <div id="counter-offer" class="offer" hidden></div>
+        <div id="warnings" hidden class="note"></div>
+        <div id="error" role="alert" hidden class="note error"></div>
+      </section>
+    </div>
+    <section class="catalog-section"><h2>Каталог продуктов</h2><div class="catalog" id="catalog"></div></section>
+  </main>
+  <script>
+    const rub = value => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 2 }).format(value);
+    const byId = id => document.getElementById(id);
+    function showQuote(data) {
+      byId('result-values').hidden = false;
+      byId('payment').textContent = rub(data.monthly_payment_rub);
+      byId('rate').textContent = data.rate_pct.toLocaleString('ru-RU') + '% годовых';
+      byId('last-payment').textContent = rub(data.last_payment_rub);
+      byId('total').textContent = rub(data.total_payment_rub);
+      byId('overpayment').textContent = rub(data.overpayment_rub);
+    }
+    byId('credit-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const mode = event.submitter?.value || 'calculate';
+      const payload = { amount_rub: byId('amount').value, term_months: Number(byId('months').value) };
+      byId('error').hidden = true;
+      byId('counter-offer').hidden = true;
+      byId('warnings').hidden = true;
+      byId('result-values').hidden = true;
+      if (mode === 'decide') {
+        payload.client_id = byId('client').value.trim();
+        if (!payload.client_id) {
+          byId('result-title').textContent = 'Укажите клиента';
+          byId('result-reason').textContent = 'Номер клиента нужен для проверки дохода и кредитной истории.';
+          byId('client').focus();
+          return;
+        }
+      }
+      const buttons = [...document.querySelectorAll('button')];
+      buttons.forEach(button => button.disabled = true);
+      byId('result-title').textContent = 'Рассчитываем…';
+      byId('result-reason').textContent = mode === 'decide' ? 'Проверяем данные клиента и платежи по действующим кредитам.' : '';
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      try {
+        const response = await fetch('/credit/' + mode, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: controller.signal });
+        const data = await response.json();
+        if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Проверьте сумму, срок и номер клиента.');
+        showQuote(data);
+        if (mode === 'calculate') {
+          byId('result-title').textContent = 'Предварительный расчёт';
+          byId('result-reason').textContent = 'Расчёт по минимальной ставке. Ставка по заявке зависит от данных клиента.';
+        } else {
+          byId('result-title').textContent = { approved: 'Предварительно одобрено', rejected: 'Пока не одобрено', counteroffer: 'Есть встречное предложение' }[data.decision] || 'Решение получено';
+          byId('result-reason').textContent = data.reason;
+          byId('warnings').textContent = data.warnings.join(' ');
+          byId('warnings').hidden = false;
+          if (data.counter_offer) {
+            const offer = data.counter_offer;
+            const container = byId('counter-offer');
+            container.replaceChildren();
+            const title = document.createElement('strong');
+            title.textContent = 'Можно рассмотреть ' + rub(offer.amount_rub);
+            const text = document.createElement('p');
+            text.textContent = 'На ' + offer.term_months + ' мес., платёж ' + rub(offer.monthly_payment_rub) + '. Всего к возврату ' + rub(offer.total_payment_rub) + '.';
+            container.append(title, text);
+            container.hidden = false;
+          }
+        }
+      } catch (error) {
+        byId('result-title').textContent = 'Результат пока недоступен';
+        byId('result-reason').textContent = 'Заявка не сохранена, деньги не выданы.';
+        byId('error').textContent = error.name === 'AbortError' ? 'Банк отвечает дольше обычного. Попробуйте ещё раз.' : error.message;
+        byId('error').hidden = false;
+      } finally {
+        clearTimeout(timer);
+        buttons.forEach(button => button.disabled = false);
+      }
+    });
+    fetch('/products').then(response => {
+      if (!response.ok) throw new Error('catalog');
+      return response.json();
+    }).then(data => {
+      data.items.forEach(product => {
+        const card = document.createElement('div');
+        card.className = 'product';
+        const title = document.createElement('strong');
+        title.textContent = product.name;
+        const description = document.createElement('small');
+        description.textContent = product.kind === 'credit' ? 'От 19,9% годовых · предварительное решение' : product.rate_pct ? product.rate_pct + '% годовых' : 'Для ежедневных покупок';
+        card.append(title, description);
+        byId('catalog').append(card);
+      });
+    }).catch(() => { byId('catalog').textContent = 'Каталог временно недоступен.'; });
+  </script>
+</body>
+</html>
