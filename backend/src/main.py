@@ -84,7 +84,8 @@ async def health() -> dict:
             "commit": COMMIT, "clients_loaded": len(_clients),
             "transactions_loaded": len(_transactions),
             "credit_history_loaded": len(_credit_history),
-            "credit_applications": len(_applications) + len(_r1_applications)}
+            "credit_applications": len(_applications) + len(_r1_applications),
+            "deposits": len(_deposits)}
 
 
 @app.get("/clients")
@@ -579,3 +580,90 @@ async def r1_update_application(
     a["status"] = status
     a["updated_at"] = _now_iso()
     return a
+
+
+# ---------------------------------------------------------------------------
+# Release 2, R2-B2 (spec from retail): deposits.
+# POST /api/deposits debits the account and opens a deposit;
+# GET /api/deposits/{client_id} lists the client's deposits.
+# ---------------------------------------------------------------------------
+
+DEPOSIT_DEFAULT_TERM = 12
+_deposits: dict[str, dict[str, Any]] = {}
+_deposit_idempotency: dict[str, str] = {}  # idempotency_key -> deposit_id
+
+
+def _add_months(d: date, months: int) -> date:
+    m = d.month - 1 + months
+    y = d.year + m // 12
+    m = m % 12 + 1
+    return date(y, m, min(d.day, calendar.monthrange(y, m)[1]))
+
+
+def _deposit_response(dep: dict[str, Any], client: dict[str, Any]) -> dict:
+    return {"status": "ok", "deposit_id": dep["deposit_id"],
+            "new_balance_rub": client["balance_rub"], "deposit": dep}
+
+
+@app.post("/api/deposits", status_code=201)
+async def r2_open_deposit(
+    payload: dict = Body(..., examples=[{
+        "client_id": "c-01003", "product_id": "deposit-base", "amount_rub": 50000,
+        "term_months": 12, "rate_pct": 14.0,
+    }]),
+) -> dict:
+    """R2-B2. Open a deposit: debit the account, create the deposit and a
+    `deposit_open` transaction. 422 if the balance is insufficient."""
+    client = _r1_client(payload)
+    key = payload.get("idempotency_key")
+    if key is not None and str(key) in _deposit_idempotency:
+        return _deposit_response(_deposits[_deposit_idempotency[str(key)]], client)
+    product_id = payload.get("product_id")
+    if not product_id or not isinstance(product_id, str):
+        raise HTTPException(status_code=422, detail="укажи product_id вклада")
+    amount = _r1_int(payload, "amount_rub", 1, 1_000_000_000, "сумма")
+    term = (_r1_int(payload, "term_months", 1, 120, "срок")
+            if payload.get("term_months") is not None else DEPOSIT_DEFAULT_TERM)
+    rate = _r1_rate(payload, required=False)
+    if amount > client["balance_rub"]:
+        raise HTTPException(
+            status_code=422,
+            detail=f"недостаточно средств: на счёте {client['balance_rub']} ₽, "
+                   f"а для вклада нужно {amount} ₽")
+
+    now = _now_iso()
+    today = date.today()
+    client["balance_rub"] -= amount
+    dep_id = f"dep-{len(_deposits) + 1:06d}"
+    tx = {
+        "id": f"t-{100000 + len(_transactions) + 1:08d}",
+        "client_id": client["id"], "type": "deposit_open", "amount_rub": -amount,
+        "ts": now, "counterparty": f"Вклад {dep_id}",
+    }
+    _transactions.append(tx)
+    dep = {
+        "deposit_id": dep_id, "client_id": client["id"], "product_id": product_id,
+        "amount_rub": amount, "term_months": term, "rate_pct": rate,
+        "opened_at": now, "maturity_date": _add_months(today, term).isoformat(),
+        # simple interest, paid at maturity
+        "expected_income_rub": round(amount * rate / 100 * term / 12) if rate else None,
+        "status": "active", "tx_id": tx["id"],
+    }
+    _deposits[dep_id] = dep
+    if key is not None:
+        _deposit_idempotency[str(key)] = dep_id
+    products = client.setdefault("products", [])
+    if product_id not in products:
+        products.append(product_id)
+    return _deposit_response(dep, client)
+
+
+@app.get("/api/deposits/{client_id}")
+async def r2_list_deposits(client_id: str) -> dict:
+    """R2-B2. Client's deposits, newest first."""
+    if client_id not in _clients_by_id:
+        raise HTTPException(status_code=404, detail=f"клиент {client_id} не найден")
+    items = [d for d in _deposits.values() if d["client_id"] == client_id]
+    items.reverse()
+    return {"total": len(items), "total_amount_rub": sum(d["amount_rub"] for d in items),
+            "items": items}

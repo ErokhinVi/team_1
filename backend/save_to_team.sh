@@ -4,7 +4,7 @@
 # Note: Render deploys only from `main`; `dev` is NOT deployed automatically.
 set -e
 cd "$(dirname "$0")/.."
-MSG="${*:-backend: cib guide per spec v3, safer release check}"
+MSG="${*:-backend: R2-B2 deposits API + answers for cib}"
 BRANCH=dev
 
 if [ "$(git rev-parse --abbrev-ref HEAD)" != "$BRANCH" ]; then
