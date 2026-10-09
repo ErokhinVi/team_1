@@ -52,12 +52,33 @@ c-01016 → `debt 101076` при доходе 84 019 ₽ (→ `declined`).
   уже есть, но без фильтра по сроку (нагрузка завышена) — исправится при
   следующем выпуске dev → main.
 
+### Ответы на вопросы cib (из `cib/CONTRACT.md`, 9 октября)
+
+1. **Какой долг брать — `summary.monthly_debt_payment_rub` или верхний
+   `active_monthly_payment_rub`?** Любой: оба считаются по одному и тому же
+   набору — `status == "active"` и срок (`opened_at + term_months`) ещё не
+   истёк; кредиты, выданные через заявки, — всегда. Разница только в
+   округлении: `summary` округляет сумму, верхнее поле — каждый платёж
+   отдельно (расхождение ≤ 1–2 ₽). По ТЗ retail — брать `summary`.
+2. **Зарплатный клиент.** `is_salary_client = true`, если у клиента есть хотя
+   бы одна транзакция `salary`; `avg_salary_rub` — их среднее (0, если нет).
+   Правило из ТЗ retail (R1-C1, шаг 4): ставка −1.0 п.п. для зарплатного.
+3. **Согласие и защита от повторной выдачи.** Проверяет не cib. Retail
+   после «Получить деньги» зовёт `POST /api/credit-disburse` с
+   `application_id` — повтор с тем же id деньги второй раз не зачисляет
+   (возвращает тот же ответ). В ранней схеме — `POST /credit-applications`
+   с `idempotency_key`. cib в backend ничего не пишет — всё верно.
+4. **Названия исходов.** Retail ждёт `decision` ∈ `approved | counter |
+   declined` (см. `retail/CONTRACT.md`). Если cib отдаёт `counteroffer` /
+   `rejected` — договоритесь с retail, иначе клиент не увидит встречное
+   предложение и отказ.
+
 ## Что я отдаю наружу
 
 ### GET /health
 Проверка живости. Возвращает `{status, team, block, commit, clients_loaded,
 transactions_loaded, credit_history_loaded, credit_applications}`
-(`credit_applications` — заявки обоих вариантов).
+(`credit_applications` — заявки обоих вариантов), `deposits`.
 
 ### GET /clients
 Список клиентов команды. Параметры запроса (все опциональные):
@@ -121,6 +142,26 @@ monthly_payment_rub?, reason?}` (лишние поля сохраняются к
 `PATCH /api/credit-applications/{application_id}` — вход
 `{status: "accepted"|"rejected_by_client"}`, ответ — обновлённая заявка
 (+`updated_at`).
+
+## Релиз 2 — вклады (R2-B2, по ТЗ retail)
+
+### POST /api/deposits
+Открыть вклад. Вход `{client_id, product_id, amount_rub, term_months?,
+rate_pct?, idempotency_key?}` (`term_months` по умолчанию 12, 1–120;
+`rate_pct` — ставка из каталога cib, необязательна). Списывает сумму со
+счёта, создаёт вклад и транзакцию `deposit_open` (сумма с минусом).
+Ответ `201`: `{status: "ok", deposit_id ("dep-000001"), new_balance_rub,
+deposit: {deposit_id, client_id, product_id, amount_rub, term_months,
+rate_pct, opened_at, maturity_date, expected_income_rub, status: "active",
+tx_id}}`. `expected_income_rub` — простые проценты к концу срока (или
+`null`, если ставка не передана).
+Ошибки: `422` — денег на счёте не хватает (`detail` по-русски, с балансом),
+нет `product_id`, неверная сумма/срок/ставка; `404` — клиента нет.
+Повтор с тем же `idempotency_key` второй вклад не открывает.
+
+### GET /api/deposits/{client_id}
+Вклады клиента, новые сверху: `{total, total_amount_rub, items: [вклад]}`.
+`404`, если клиента нет.
 
 ## Кредиты — основная схема (ТЗ retail v2)
 
