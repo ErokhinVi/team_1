@@ -4,78 +4,73 @@
 видят только этот файл — не код. Если ручка изменилась или появилась новая —
 обнови этот файл, иначе сосед о ней не узнает.
 
-## Для cib — коротко (по ТЗ retail v3, обновлено 9 октября)
+## Для cib (Алексей) — данные для матрицы CRO (R1-C3), обновлено 9 октября, 12:58
 
-Чтобы принять решение по кредиту, cib нужен **один вызов** к backend:
+Всё, что нужно матрице, отдаёт **один запрос**:
 
-> Новое (R2-B1): `GET /clients/{client_id}/profile` отдаёт карточку клиента
-> и тот же `summary` одним ответом — можно вместо двух запросов
-> (`/clients/{id}` + `/credit-history/{id}`). Старые ручки тоже работают.
+`GET {BACKEND_URL}/clients/{client_id}/profile` — таймаут 2 с.
 
-`GET {BACKEND_URL}/credit-history/{client_id}` — таймаут 2 с.
+(Запасной путь — два запроса: `GET /clients/{id}` + `GET /credit-history/{id}`;
+блок `summary` в них тот же.)
 
-Из ответа брать блок **`summary`**:
+### Какое поле — к какому шагу матрицы
 
-| Поле `summary.*` | Что значит | Где в политике (ТЗ retail, R1-C1) |
-|---|---|---|
-| `monthly_debt_payment_rub` | Сколько клиент уже платит в месяц по кредитам, срок которых ещё идёт | `debt` в шаге 6 (PTI) |
-| `has_active_overdue` | Есть просрочка по кредиту, срок которого ещё идёт | стоп-фактор → `declined` |
-| `is_salary_client` | Получает зарплату в нашем банке | −1.0 п.п. к ставке |
-| `avg_salary_rub` | Средняя зарплата (0, если не зарплатный) | для объяснения клиенту |
-| `active_count` | Сколько кредитов сейчас идёт | для объяснения клиенту |
-| `max_overdue_days` | Худшая просрочка за всю историю | только для объяснения: прошлая просрочка сама по себе — не отказ |
+| Шаг R1-C3 | Поле в ответе `/profile` |
+|---|---|
+| 1. Сегмент не из матрицы (`sme`) → `product_scope` | `segment` |
+| 1. Доход 0 → `income` | `income_rub` |
+| 1. Текущая просрочка → `current_overdue` | `summary.has_active_overdue` |
+| 1. Риск ≥ 0.65 → `risk`; 2. риск-группа | `risk_score` |
+| 1–2. Прошлая просрочка ≥ 60 дней | `summary.max_overdue_days` (худшая за всю историю) |
+| 3. −0.5 / −1.0 / −1.5 по сегменту | `segment` |
+| 3. −1.0 зарплатному | `summary.is_salary_client` |
+| 5. Текущие платежи для PTI | `summary.monthly_debt_payment_rub` |
+| 5. Порог PTI по доходу | `income_rub` |
 
-Пример — клиент c-01001 (доход 73 118 ₽, risk 0.344, mass):
-```
-GET /credit-history/c-01001
-{"client_id": "c-01001", "total": 3, "items": [...],
- "summary": {"active_count": 1, "max_overdue_days": 0,
-             "has_active_overdue": false, "monthly_debt_payment_rub": 10269,
-             "is_salary_client": false, "avg_salary_rub": 0}, ...}
-```
-→ по политике: группа B, ставка 20.0%, 150 000 ₽ на 24 мес →
-`approved`, платёж 7 634 ₽/мес.
+`summary.monthly_debt_payment_rub` уже **без** кредитов с истёкшим сроком
+(374 из 629 «active» в исходных данных) и **с** кредитами, выданными через
+наш банк. Пересчитывать по `items` не нужно.
 
-Проверка на других клиентах: c-01000 → `debt 23160` (→ `counter` 20 000 ₽);
-c-01002 → `is_salary_client true, avg_salary_rub 40425` (→ 19.0%);
-c-01016 → `debt 101076` при доходе 84 019 ₽ (→ `declined`).
+Признак `has_overdue_history` в карточке и `summary.max_overdue_days` —
+разные источники и иногда не совпадают (например, c-01007: флаг есть,
+а в кредитной истории просрочек нет). Для матрицы CRO нужен
+`max_overdue_days`.
 
-Важно:
-- Закончившиеся по сроку «active» кредиты из исходных данных (374 из 629)
-  backend в нагрузку **уже не считает** — пересчитывать по `items` не нужно.
-- Нет истории (`total: 0`) → нули и `false`. Это **не повод для отказа**.
-- `404` — такого клиента нет. Ошибка/таймаут → деградация из ТЗ:
-  `debt = 0`, `has_active_overdue = false`, `is_salary_client = false`.
-- cib **ничего не пишет в backend**: заявку и выдачу денег записывает retail
-  после согласия клиента.
-- Retail зовёт `POST /api/decision` (запасной — `/credit/decide`). Лучше
-  делать `/api/decision`.
-- Посмотреть ответ руками: `https://team1-backend.erokhinva.workers.dev/docs`
-  → `GET /credit-history/{client_id}` → Try it out.
-- Где это работает: всё выше — в `dev`. В живом банке (`main`) `summary`
-  уже есть, но без фильтра по сроку (нагрузка завышена) — исправится при
-  следующем выпуске dev → main.
+### Входные данные клиентов из приёмки R1-C3 (данные backend на 9 октября, до новых выдач)
 
-### Ответы на вопросы cib (из `cib/CONTRACT.md`, 9 октября)
+| Клиент | segment | income_rub | risk_score | debt (`summary.monthly_debt_payment_rub`) | has_active_overdue | max_overdue_days | is_salary_client |
+|---|---|---|---|---|---|---|---|
+| c-01003 | mass | 63 526 | 0.315 | 0 | false | 0 | false |
+| c-01002 | mass | 40 425 | 0.286 | 0 | false | 0 | true |
+| c-01001 | mass | 73 118 | 0.344 | 10 269 | false | 0 | false |
+| c-01000 | mass | 49 144 | 0.270 | 23 160 | false | 0 | false |
+| c-01007 | mass | 42 103 | 0.573 | 0 | false | 0 | true |
+| c-01017 | mass_affluent | 150 323 | 0.187 | 0 | false | 0 | true |
+| c-01011 | mass_affluent | 179 174 | 0.265 | 0 | false | 0 | true |
 
-1. **Какой долг брать — `summary.monthly_debt_payment_rub` или верхний
-   `active_monthly_payment_rub`?** Любой: оба считаются по одному и тому же
-   набору — `status == "active"` и срок (`opened_at + term_months`) ещё не
-   истёк; кредиты, выданные через заявки, — всегда. Разница только в
-   округлении: `summary` округляет сумму, верхнее поле — каждый платёж
-   отдельно (расхождение ≤ 1–2 ₽). По ТЗ retail — брать `summary`.
-2. **Зарплатный клиент.** `is_salary_client = true`, если у клиента есть хотя
-   бы одна транзакция `salary`; `avg_salary_rub` — их среднее (0, если нет).
-   Правило из ТЗ retail (R1-C1, шаг 4): ставка −1.0 п.п. для зарплатного.
-3. **Согласие и защита от повторной выдачи.** Проверяет не cib. Retail
-   после «Получить деньги» зовёт `POST /api/credit-disburse` с
-   `application_id` — повтор с тем же id деньги второй раз не зачисляет
-   (возвращает тот же ответ). В ранней схеме — `POST /credit-applications`
-   с `idempotency_key`. cib в backend ничего не пишет — всё верно.
-4. **Названия исходов.** Retail ждёт `decision` ∈ `approved | counter |
-   declined` (см. `retail/CONTRACT.md`). Если cib отдаёт `counteroffer` /
-   `rejected` — договоритесь с retail, иначе клиент не увидит встречное
-   предложение и отказ.
+**Проверено backend:** если применить матрицу R1-C3 к этим данным, получается
+ровно таблица приёмки из `retail/CONTRACT.md` (все 7 строк: c-01003 approved
+B 19.9% 7 627 ₽; c-01002 18.9% 7 554 ₽; c-01001 19.9% 7 627 ₽; c-01000
+rejected debt_burden; c-01007 counteroffer D 25.9% 80 000 ₽ 4 306 ₽;
+c-01017 A 16.4% 34 408 ₽; c-01011 B 18.4% 35 082 ₽). Если у cib не сходится —
+дело в расчёте, не в данных. Аннуитет: `S*m/(1-(1+m)^-n)`, `m = ставка/1200`.
+
+### Что уже решено (не нужно согласовывать)
+
+- Формат `/credit/decide` (`approved / counteroffer / rejected`) retail принял
+  как есть, `/api/decision` не нужен (см. `retail/CONTRACT.md`, 12:55).
+- Согласие клиента и защита от повторной выдачи — на retail + backend:
+  retail зовёт `POST /api/credit-disburse` с `application_id`, повтор деньги
+  второй раз не зачисляет. cib в backend ничего не пишет.
+- Нет истории (`total: 0`) → нули и `false`, это не отказ.
+- Ошибка/таймаут backend — решение по ТЗ (у cib сейчас `503`, retail
+  понимает его как техническую паузу).
+
+### Для R2-C1 (`GET /api/offers/{client_id}`, баннер «Вам одобрено до N ₽»)
+Тот же `/profile` — один запрос на клиента, данные те же.
+
+Посмотреть руками: `https://team1-backend.erokhinva.workers.dev/docs` →
+`GET /clients/{client_id}/profile` → Try it out (после выпуска dev → main).
 
 ## Что я отдаю наружу
 
