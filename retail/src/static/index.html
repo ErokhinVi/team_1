@@ -477,8 +477,7 @@
       try {
         const r = await fetch("/api/credit-accept", {
           method: "POST", headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({ client_id: o.client_id, amount_rub: o.amount_rub, rate_pct: o.rate_pct,
-                                 term_months: o.term_months, application_id: o.application_id }),
+          body: JSON.stringify({ offer_id: o.offer_id }),
         });
         const d = await r.json();
         if (r.ok && d.status === "ok") {
@@ -496,7 +495,7 @@
     });
 
     const creditHistory = document.getElementById("credit-history");
-    const DEC_LABEL = { approved: "Одобрено", counter: "Встречное", declined: "Отказ", pending: "На рассмотрении" };
+    const DEC_LABEL = { approved: "Выдан", rejected: "Отказ", pending: "На рассмотрении" };
     async function loadCreditHistory(clientId) {
       try {
         const r = await fetch(`/api/credit-applications/${clientId}`);
@@ -505,7 +504,7 @@
         creditHistory.innerHTML = items.length ? items.map(a => `<div class="tx-row">
             <div><div class="desc">${fmt.format(a.amount_rub)} ₽ · ${termLabel(a.term_months)}</div>
             <div class="ts">${(a.created_at || "").replace("T", " ").slice(0, 16)}</div></div>
-            <div class="amt">${a.status === "accepted" ? "Выдан" : (DEC_LABEL[a.decision] || a.decision)}</div>
+            <div class="amt">${DEC_LABEL[a.status] || a.status || ""}</div>
           </div>`).join("") : `<div class="empty">Заявок пока нет</div>`;
       } catch(e) { creditHistory.innerHTML = `<div class="empty">Заявок пока нет</div>`; }
     }

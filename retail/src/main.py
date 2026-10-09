@@ -7,6 +7,7 @@ cib + backend) добавляет владелец блока в рамках з
 from __future__ import annotations
 
 import os
+import uuid
 from pathlib import Path
 
 import httpx
@@ -133,13 +134,16 @@ async def credit_apply(payload: dict) -> dict:
         "has_overdue_history": client.get("has_overdue_history"),
     }
 
-    base = {"client_id": client_id, "segment": seg,
+    base = {"client_id": client_id, "segment": seg, "product": request_to_cib["product"],
             "segment_label": SEGMENT_LABELS.get(seg, seg),
             "requested_amount_rub": amount, "requested_term_months": term}
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as http:
             r = await http.post(f"{CIB_URL}/api/decision", json=request_to_cib)
+            if r.status_code in (404, 405):
+                # cib's own plan names the route /credit/decide; accept either.
+                r = await http.post(f"{CIB_URL}/credit/decide", json=request_to_cib)
     except httpx.HTTPError:
         return {**base, "decision": "pending",
                 "message": "Заявка принята. Решение пришлём в течение нескольких минут."}
@@ -157,7 +161,7 @@ async def credit_apply(payload: dict) -> dict:
         out["monthly_payment_rub"] = _annuity(appr_amount, float(rate), appr_term)
     if out.get("monthly_payment_rub"):
         out["total_cost_rub"] = out["monthly_payment_rub"] * appr_term
-    out["application_id"] = await _save_application(out)
+    await _record_outcome(out)
     return out
 
 
@@ -172,55 +176,71 @@ async def _backend_post(path: str, payload: dict, method: str = "POST") -> httpx
         return None
 
 
-async def _save_application(result: dict) -> str | None:
-    """Release 1, R1-B3: store the application at backend (best effort)."""
-    if result.get("decision") == "pending":
-        return None
-    r = await _backend_post("/api/credit-applications", {
-        "client_id": result["client_id"],
-        "amount_rub": result["requested_amount_rub"],
-        "term_months": result["requested_term_months"],
-        "decision": result["decision"],
-        "rate_pct": result.get("rate_pct"),
-        "approved_amount_rub": result.get("amount_rub"),
-        "monthly_payment_rub": result.get("monthly_payment_rub"),
-        "reason": result.get("reason"),
-    })
-    if r is not None and r.status_code == 200:
-        return r.json().get("application_id")
-    return None
+# Offers issued to clients, keyed by offer_id. The client accepts an offer by id,
+# so amount/rate cannot be tampered with and a double click never pays twice.
+OFFERS: dict[str, dict] = {}
+ACCEPTED: dict[str, dict] = {}
+MAX_OFFERS = 5000
+
+
+async def _record_outcome(result: dict) -> None:
+    """Approved/counter -> keep an offer for the client; declined -> log it at backend."""
+    decision = result.get("decision")
+    if decision in ("approved", "counter"):
+        offer_id = uuid.uuid4().hex[:12]
+        if len(OFFERS) >= MAX_OFFERS:
+            OFFERS.pop(next(iter(OFFERS)))
+        OFFERS[offer_id] = {k: result.get(k) for k in (
+            "client_id", "amount_rub", "rate_pct", "term_months", "reason", "product")}
+        result["offer_id"] = offer_id
+    elif decision == "declined":
+        await _backend_post("/credit-applications", {
+            "client_id": result["client_id"],
+            "amount_rub": result["requested_amount_rub"],
+            "term_months": result["requested_term_months"],
+            "product": result.get("product") or "consumer_credit",
+            "status": "rejected",
+            "reason": result.get("reason"),
+            "decided_by": "cib",
+        })
 
 
 @app.post("/api/credit-accept")
 async def credit_accept(payload: dict) -> dict:
-    client_id = str(payload.get("client_id") or "").strip()
-    try:
-        amount = float(payload.get("amount_rub") or 0)
-        rate = float(payload.get("rate_pct") or 0)
-        term = int(payload.get("term_months") or 0)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=422, detail="сумма, ставка и срок должны быть числами")
-    if not client_id or amount <= 0 or term <= 0:
-        raise HTTPException(status_code=422, detail="нет данных одобренного предложения")
-    app_id = payload.get("application_id")
-    body = {"client_id": client_id, "amount_rub": amount, "rate_pct": rate,
-            "term_months": term, "application_id": app_id}
-    r = await _backend_post("/api/credit-disburse", body)
-    if r is None or r.status_code != 200:
-        return {"status": "pending", "amount_rub": amount,
+    offer_id = str(payload.get("offer_id") or "")
+    if offer_id in ACCEPTED:
+        return ACCEPTED[offer_id]
+    offer = OFFERS.get(offer_id)
+    if not offer:
+        raise HTTPException(status_code=422, detail="Предложение устарело — запросите решение ещё раз")
+    r = await _backend_post("/credit-applications", {
+        "client_id": offer["client_id"],
+        "amount_rub": offer["amount_rub"],
+        "term_months": offer["term_months"],
+        "product": offer.get("product") or "consumer_credit",
+        "status": "approved",
+        "rate_pct": offer["rate_pct"],
+        "reason": offer.get("reason"),
+        "decided_by": "cib",
+    })
+    if r is None or r.status_code not in (200, 201):
+        return {"status": "pending", "amount_rub": offer["amount_rub"],
                 "message": "Договор подписан. Деньги поступят на счёт в течение нескольких минут."}
     d = r.json()
-    if app_id:
-        await _backend_post(f"/api/credit-applications/{app_id}", {"status": "accepted"}, "PATCH")
-    return {"status": "ok", "amount_rub": amount, "new_balance_rub": d.get("new_balance_rub"),
-            "message": "Деньги зачислены на счёт."}
+    res = {"status": "ok", "amount_rub": offer["amount_rub"],
+           "new_balance_rub": d.get("new_balance_rub"), "application_id": d.get("id"),
+           "message": "Деньги зачислены на счёт."}
+    ACCEPTED[offer_id] = res
+    OFFERS.pop(offer_id, None)
+    return res
 
 
 @app.get("/api/credit-applications/{client_id}")
 async def credit_applications(client_id: str) -> dict:
     try:
         async with httpx.AsyncClient(timeout=10.0) as http:
-            r = await http.get(f"{BACKEND_URL}/api/credit-applications/{client_id}")
+            r = await http.get(f"{BACKEND_URL}/credit-applications",
+                               params={"client_id": client_id, "limit": 20})
     except httpx.HTTPError:
         return {"total": 0, "items": []}
     return r.json() if r.status_code == 200 else {"total": 0, "items": []}
