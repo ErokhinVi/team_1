@@ -189,7 +189,9 @@
     .product .row { display: flex; gap: 8px; margin-top: 12px; }
     .product .row input { flex: 1; padding: 9px 10px; border: 1px solid var(--rule); border-radius: 6px;
       background: var(--bg); font-family: inherit; font-size: 14px; }
-    .product .row .btn { width: auto; padding: 9px 14px; }
+    .product .row { flex-wrap: wrap; }
+    .product .row input { min-width: 0; }
+    .product .row .btn { flex: 1 0 100%; width: 100%; padding: 11px 14px; }
 
     .offer-banner { margin: 0; padding: 14px 22px; background: var(--raiff); color: var(--text);
       display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; }
@@ -233,6 +235,8 @@
       <div class="section-title">Для вас</div>
       <div id="product-list"></div>
       <div id="product-result"></div>
+      <div class="section-title" style="margin-top:24px">Мои вклады</div>
+      <div id="my-deposits" class="tx-list"></div>
     </div>
 
     <div class="tab-pane" data-pane="credit">
@@ -323,6 +327,7 @@
       loadCreditPresets(opt.value);
       loadCreditHistory(opt.value);
       loadProducts(opt.value);
+      loadMyDeposits(opt.value);
       loadMyCredits(opt.value);
       loadOffer(opt.value);
     }
@@ -363,6 +368,10 @@
         atm_withdraw:   "Снятие в банкомате",
         salary:         "Зарплата",
         utility_payment:"Коммунальные",
+        loan_disbursement:"Зачисление кредита",
+        credit_disbursement:"Зачисление кредита",
+        deposit_open:   "Открытие вклада",
+        credit_payment: "Платёж по кредиту",
       })[t] || t;
     }
 
@@ -630,10 +639,26 @@
           let action = "";
           if (p.kind === "credit") action = `<div class="row"><button type="button" class="btn primary" data-act="credit">Оформить</button></div>`;
           if (p.kind === "deposit") action = `<div class="row"><input type="number" min="1000" step="1000" placeholder="Сумма, ₽" data-amt="${p.id}" />
+              <select data-term="${p.id}" style="padding:9px 6px;border:1px solid var(--rule);border-radius:6px;background:var(--bg);font-family:inherit">
+                <option value="3">3 мес</option><option value="6">6 мес</option><option value="12" selected>1 год</option><option value="24">2 года</option></select>
               <button type="button" class="btn primary" data-act="deposit" data-id="${p.id}" data-rate="${p.rate_pct ?? ""}">Открыть вклад</button></div>`;
           return `<div class="product"><div class="pn">${p.name}</div><div class="pr">${sub}</div>${action}</div>`;
         }).join("");
       } catch(e) { productList.innerHTML = `<div class="empty">Каталог временно недоступен</div>`; }
+    }
+
+    const myDeposits = document.getElementById("my-deposits");
+    async function loadMyDeposits(clientId) {
+      try {
+        const r = await fetch(`/api/my-deposits/${clientId}`);
+        const d = await r.json();
+        const items = d.items || [];
+        if (!items.length) { myDeposits.innerHTML = `<div class="empty">Вкладов пока нет</div>`; return; }
+        myDeposits.innerHTML = items.map(x => `<div class="tx-row">
+            <div><div class="desc">${fmt.format(x.amount_rub)} ₽ · ${String(x.rate_pct ?? "").replace(".", ",")}%</div>
+            <div class="ts">до ${(x.maturity_date || "").slice(0, 10).split("-").reverse().join(".")}</div></div>
+            <div class="amt plus">${x.expected_income_rub ? "+" + fmt.format(Math.round(x.expected_income_rub)) + " ₽" : ""}</div></div>`).join("");
+      } catch(e) { myDeposits.innerHTML = `<div class="empty">Вкладов пока нет</div>`; }
     }
 
     productList.addEventListener("click", async ev => {
@@ -644,13 +669,17 @@
       if (amt < 1000) { productResult.innerHTML = `<div class="alert error">Минимальная сумма вклада — 1 000 ₽</div>`; return; }
       b.disabled = true;
       try {
+        const term = +(productList.querySelector(`select[data-term="${b.dataset.id}"]`).value || 12);
+        const key = `${opt.value}-${b.dataset.id}-${Date.now()}`;
         const r = await fetch("/api/deposit-open", { method: "POST", headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({ client_id: opt.value, product_id: b.dataset.id, amount_rub: amt, rate_pct: +b.dataset.rate || null }) });
+          body: JSON.stringify({ client_id: opt.value, product_id: b.dataset.id, amount_rub: amt, term_months: term,
+                                 rate_pct: +b.dataset.rate || null, idempotency_key: key }) });
         const d = await r.json();
         if (r.ok && d.status === "ok") {
           if (d.new_balance_rub != null) setBalance(d.new_balance_rub);
-          productResult.innerHTML = `<div class="alert ok">${d.message} ${fmt.format(d.amount_rub)} ₽</div>`;
+          productResult.innerHTML = `<div class="alert ok">${fmt.format(d.amount_rub)} ₽ — ${d.message}</div>`;
           loadTx(opt.value);
+          loadMyDeposits(opt.value);
         } else {
           productResult.innerHTML = `<div class="alert ${r.ok ? "info" : "error"}">${d.message || d.detail || "Не получилось"}</div>`;
         }
